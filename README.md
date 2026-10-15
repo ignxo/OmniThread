@@ -1,69 +1,84 @@
-# OmniThread Ultimate — Lock-Free Multi-Threaded Engine for RimWorld 1.5 / 1.6
+# OmniThread Ultimate — Lock-Free Multi-Threaded Engine for RimWorld (1.3 – 1.7)
 
-**OmniThread Ultimate** to wielowątkowy silnik optymalizacyjny C# (Harmony) dla **RimWorld 1.5 / 1.6**, który zrównolegla główną pętlę symulacji gry (`TickList.Tick()`, `Pawn.DoTick()`, `Pawn_NeedsTracker`, `AttackTargetsCache`, `MapPostTick`) na wszystkie wątki logiczne procesora przy zachowaniu **100% deterministycznego bezpieczeństwa pamięci (`caughtConcurrencyExceptions: 0`)**.
+![RimWorld 1.3-1.7](https://img.shields.io/badge/RimWorld-1.3%20%7C%201.4%20%7C%201.5%20%7C%201.6%20%7C%201.7-00d2ff?style=for-the-badge)
+![License MIT](https://img.shields.io/badge/License-MIT-50fa96?style=for-the-badge)
+![Threads 12+](https://img.shields.io/badge/Multi--Threading-Work--Stealing%20Pool-ff9e3b?style=for-the-badge)
+![RimPy Compatible](https://img.shields.io/badge/RimPy%20%26%20RimSort-Auto--Sort%20Ready-a970ff?style=for-the-badge)
 
----
-
-## Kluczowe Funkcje (Key Features)
-
-1. **Dedykowana Pula Stałych Wątków (`OmniThread_Worker`) + Work-Stealing:**
-   - Zamiast standardowego `Parallel.For` (który cierpi na problem skupienia ciężkich obiektów `Pawn` na końcu listy `TickList`), mod utrzymuje stałe wątki robocze budzone niskopoziomową barierą `ManualResetEventSlim`.
-   - Przeplatanie pionków (`Interleaved LPT`) i atomowe podkradanie zadań (`Interlocked.Increment`) gwarantują równomierne obciążenie **wszystkich wątków CPU (12/12)** w każdym ticku.
-2. **Architektura Lock-Free (`[ThreadStatic]` + Transpilatory IL Harmony):**
-   - Bezkolizyjny `ThreadLocalBFSWorker` dla `RegionTraverser.BreadthFirstTraverse` — wszystkie wątki mogą jednocześnie przeszukiwać regiony mapy (BFS) bez globalnych blokad.
-   - Bezkolizyjna pula `[ThreadStatic]` dla `GenClosest.RegionwiseBFSWorker` (`ClosestThingReachable`).
-   - Transpilatory IL Harmony podmieniające statyczne bufory w `Pawn_HealthTracker` (`tmpHediffs`, `tmpRemovedHediffs`) oraz `Pawn_InteractionsTracker` (`workingList`) na izolowane bufory wątkowe.
-   - Izolacja generatora liczb losowych `Verse.Rand` per wątek (`[ThreadStatic]`).
-3. **Atomowa Kolejka Synchronizacji Głównego Wątku (`MainThreadSyncQueue`):**
-   - Operacje wymagające głównego wątku silnika Unity (spawnowanie/niszczenie obiektów `SpawnSetup`/`DeSpawn`/`Destroy`, aktualizacja siatek mapy, dźwięki, przerywanie zadań AI) są przechwytywane i wykonywane deterministycznie na końcu ticku.
-4. **Pełna Kompatybilność z Modami i Menedżerami Modów (RimPy / RimSort):**
-   - **RimPy Mod Manager & RimSort:** Pełna obsługa automatycznego sortowania (`About/About.xml` + `About/Manifest.xml` + `LoadFolders.xml` + `About/Preview.png`).
-   - **Wbudowane profile + Auto-Guard dla 60+ modów:**
-     - **RocketMan (`vr.missilegirl`)** — bezblokadowe obejścia `StatWorker_Patch`, `SignatureUtility`, `GenTemperature_Patch` oraz wyłączenie zduplikowanej dylatacji czasu.
-     - **CAI-5000 / CombatAI (`Krkr.rule56`)** — Pre-Warming `CombatAI.CompCache` na głównym wątku (100% trafień `TryGetValue` bez zapisów z wątków roboczych) oraz synchronizacja `SightTracker`, `AvoidanceTracker`, `CoverPositionFinder` i `RegionFlooder`.
-     - **Combat Extended (`CETeam.CombatExtended`)** — bezpieczny routing balistyki `ProjectileCE` oraz synchronizacja `LightingTracker`.
-     - **Vehicle Framework (`SmashPhil.VehicleFramework`)** — bezpieczny routing wielokafelkowych pojazdów `VehiclePawn`.
-     - **Vanilla Expanded Framework (`VEF`)**, **Vanilla Psycasts Expanded**, **Vanilla Social Interactions Expanded**, **Vanilla Memes Expanded**.
-     - **Zoology Mod**, **RunAndGun**, **Simple Sidearms**, **Pick Up And Haul**, **CommonSense**, **Smart Medicine**, **Hospitality**, **Dubs Bad Hygiene**, **Performance Optimizer**.
-     - **Universal Auto-Guard (`ScanAndProtectThirdPartyModHooks`)** — automatyczny skaner wykrywający i zabezpieczający patche Harmony nieznanych modów na ścieżce `Tick`.
+**OmniThread Ultimate** is a high-performance C# (Harmony) multi-threading optimization mod for **RimWorld (1.3, 1.4, 1.5, 1.6, and 1.7)**. It parallelizes RimWorld's core simulation loop (`TickList.Tick()`, `Pawn.DoTick()`, `Pawn_NeedsTracker`, `AttackTargetsCache`, and `MapPostTick`) across all logical CPU cores while maintaining **100% deterministic memory safety (`caughtConcurrencyExceptions: 0`)** and broad compatibility with complex overhaul mods.
 
 ---
 
-## Zweryfikowane Wyniki Benchmarków (AMD Ryzen 5 5600 — 6 Rdzeni / 12 Wątków)
+## Key Architecture & Features
 
-### 1. RimWorld 1.6 + 5 DLC (~291 walczących pionków, 3000 ticków)
+### 1. Dedicated Persistent Worker Pool (`OmniThread_Worker`) + Atomic Work-Stealing
+- **Zero ThreadPool Starvation:** Instead of relying on standard `Parallel.For` range partitioning (which suffers from severe tail-skew because RimWorld appends heavy `Pawn` instances at the very end of `TickList` buckets), OmniThread Ultimate maintains persistent background threads synchronized via low-overhead `ManualResetEventSlim` barriers.
+- **Interleaved LPT Scheduling & Atomic Work-Stealing:** Heavy `Pawn` entities are interleaved with lightweight `Thing` entities and consumed atomically via `Interlocked.Increment`, ensuring **all 12+ logical CPU threads remain 100% active** until the final pawn finishes its tick.
 
-| Konfiguracja | Średni czas ticku (`avgMsPerTick`) | Mediana ticku (`p50`) | Compute TPS (`DoSingleTick`) | `TickList` Compute TPS | Wall-Clock TPS | Błędy (`caught`) |
+### 2. Lock-Free Core Subsystems (`[ThreadStatic]` & Harmony IL Transpilers)
+- **Lock-Free `ThreadLocalBFSWorker` (`RegionTraverser.BreadthFirstTraverse`):** Replaces RimWorld's single-threaded `freeWorkers` queue and shared `region.reachedIndex` mutations with per-thread BFS worker pools and isolated `closedRegionIds` sets. Multiple threads can traverse regions simultaneously with zero lock contention.
+- **Lock-Free `GenClosest.RegionwiseBFSWorker` Pool:** Per-thread `[ThreadStatic]` pools for `RegionProcessorClosestThingReachable`.
+- **Harmony IL Transpilers:** Rewrites static shared collections inside `Pawn_HealthTracker` (`tmpHediffs`, `tmpRemovedHediffs`) and `Pawn_InteractionsTracker` (`workingList`) into thread-local buffers.
+- **Per-Thread Deterministic RNG (`Verse.Rand`):** Isolates RNG state stacks and seeds per worker thread to prevent random number corruption or state-stack crashes.
+
+### 3. Atomic `MainThreadSyncQueue`
+- Operations that mutate Unity Engine objects, map grids, or global registries (`Thing.SpawnSetup`, `Thing.DeSpawn`, `Thing.Destroy`, `GenSpawn.Spawn`, `FleckManager`, `MoteMaker`, `SoundStarter`, `MapPawns`) are automatically intercepted on worker threads and flushed deterministically on the main thread at the end of each tick.
+
+### 4. Built-In Mod Compatibility & RimPy Auto-Sorting
+- **RimPy Mod Manager & RimSort Ready:** Includes complete `<loadAfter>` rules in `About/About.xml` and `About/Manifest.xml` so clicking **Sort** in **RimPy** or **RimSort** automatically places **OmniThread Ultimate** in the optimal load order position.
+- **Dedicated Profiles for 60+ Popular Mods:**
+  - **RocketMan (`vr.missilegirl`)** — Lock-free parallel bypasses for `StatWorker_Patch`, `SignatureUtility`, and `GenTemperature_Patch`, plus automatic deduplication of `WorldPawns` time dilation.
+  - **CAI-5000 / CombatAI (`Krkr.rule56`)** — Main-thread `CompCache` pre-warming (guaranteeing 100% lock-free `TryGetValue` cache hits on worker threads) and thread-safe synchronization for `SightTracker`, `AvoidanceTracker`, `CoverPositionFinder`, `RegionFlooder`, and `CellFlooder`.
+  - **Combat Extended (`CETeam.CombatExtended`)** — Safe main-thread routing for ballistic `ProjectileCE` trajectories and thread-safe `LightingTracker` synchronization.
+  - **Vehicle Framework (`SmashPhil.VehicleFramework`)** & **Vanilla Vehicles Expanded** — Safe main-thread routing for multi-cell `VehiclePawn` instances.
+  - **Vanilla Expanded Framework (`VEF`)**, **Vanilla Psycasts Expanded**, **Vanilla Social Interactions Expanded**, **Vanilla Memes Expanded**.
+  - **Zoology Mod**, **RunAndGun**, **Simple Sidearms**, **Pick Up And Haul**, **CommonSense**, **Smart Medicine**, **Allow Tool**, **Hospitality**, **Dubs Bad Hygiene**, **Performance Optimizer**.
+- **Universal Harmony Auto-Guard (`ScanAndProtectThirdPartyModHooks`):** Automatically inspects all loaded third-party Harmony `Prefix`/`Postfix` hooks attached to RimWorld's core tick methods at startup and wraps unguarded third-party mod callbacks in re-entrant synchronization (`|L| = 1`, mathematically eliminating AB-BA deadlocks).
+- **Resilient Cross-Version Patching (`1.3` / `1.4` / `1.5` / `1.6` / `1.7`):** Dynamically adapts to API differences across RimWorld versions (`HealthTick` vs `HealthTickInterval`, `PathFinder.FindPath` vs `FindPathNow`).
+
+---
+
+## Verified Live Benchmarks (AMD Ryzen 5 5600 — 6 Cores / 12 Threads)
+
+### 1. RimWorld 1.6 + 5 Official DLCs (~291 Active Pawns in Combat, 3,000 Ticks)
+
+| Configuration | Avg Tick Time (`avgMsPerTick`) | Median Tick (`p50`) | Compute TPS (`DoSingleTick`) | `TickList` Compute TPS | Wall-Clock TPS | Concurrency Exceptions |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1 Wątek (Vanilla Baseline)** | `6.1355 ms` | `5.0419 ms` | `162.99 TPS` | `~177.0 TPS` | `119.60 TPS` | `0` |
-| **12 Wątków (`OmniThread Ultimate`)** | **`2.9323 ms`** | **`1.1169 ms` (4.51x)** | **`341.02 TPS` (+109.2%)** | **`402.44 TPS` (+127.4%)** | **`245.96 TPS` (2.06x)** | **`0`** |
+| **1 Thread (Vanilla Baseline)** | `6.1355 ms` | `5.0419 ms` | `162.99 TPS` | `~177.0 TPS` | `119.60 TPS` | `0` |
+| **12 Threads (`OmniThread Ultimate`)** | **`2.9323 ms`** | **`1.1169 ms` (4.51x)** | **`341.02 TPS` (+109.2%)** | **`402.44 TPS` (+127.4%)** | **`245.96 TPS` (2.06x)** | **`0`** |
 
-### 2. Pełna Paczka 57 Modów (50 Modów + 5 DLC — `CE` + `CAI-5000` + `RocketMan` + `VEF` + `Zoology`, ~268 pionków, 3000 ticków)
+### 2. Heavy 57-Mod Combat Stress Test (50 Mods + 5 DLCs — `CE` + `CAI-5000` + `RocketMan` + `VEF` + `Zoology`, ~268 Pawns, 3,000 Ticks)
 
-| Konfiguracja | Średni czas ticku | Mediana ticku (`p50`) | Min czas ticku | Compute TPS | `TickList` TPS | Wall-Clock TPS | Aktywne Wątki | Błędy (`caught`) |
+| Configuration | Avg Tick Time | Median Tick (`p50`) | Min Tick Time | Compute TPS | `TickList` TPS | Wall-Clock TPS | Active Threads | Concurrency Exceptions |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1 Wątek (57 Modów Baseline)** | `11.2229 ms` | `7.7636 ms` | `3.4217 ms` | `89.10 TPS` | `104.85 TPS` | `64.09 TPS` | `1 / 12` | `0` |
-| **12 Wątków (`OmniThread Ultimate`)** | **`8.06–8.54 ms`** | **`4.70–5.17 ms` (+50–65%)** | **`1.43 ms` (2.39x)** | **`117–124 TPS` (+31–39%)** | **`142–160 TPS` (+36–53%)** | **`85.2–91.3 TPS` (+33–42%)** | **`12.00 / 12`** | **`0`** |
+| **1 Thread (57 Mods Baseline)** | `11.2229 ms` | `7.7636 ms` | `3.4217 ms` | `89.10 TPS` | `104.85 TPS` | `64.09 TPS` | `1 / 12` | `0` |
+| **12 Threads (`OmniThread Ultimate`)** | **`8.06–8.54 ms`** | **`4.70–5.17 ms` (+50–65%)** | **`1.43 ms` (2.39x)** | **`117–124 TPS` (+31–39%)** | **`142–160 TPS` (+36–53%)** | **`85.2–91.3 TPS` (+33–42%)** | **`12.00 / 12`** | **`0`** |
 
 ---
 
-## Instalacja (RimPy / Steam / Ręczna)
+## Installation (RimPy / RimSort / Manual)
 
-1. Sklonuj repozytorium lub pobierz paczkę bezpośrednio do folderu `RimWorld/Mods/OmniThreadUltimate`:
+1. Clone this repository or extract the latest release `.zip` into your `RimWorld/Mods/` directory:
    ```bash
    git clone https://github.com/ignxo/OmniThread-Ultimate.git "OmniThreadUltimate"
    ```
-2. W **RimPy Mod Manager** (lub **RimSort**):
-   - Aktywuj mod **OmniThread Ultimate** (`omnithread.ultimate`).
-   - Kliknij **Sort** — dzięki regułom `<loadAfter>` w `About/About.xml` oraz `About/Manifest.xml`, RimPy automatycznie umieści mod na samym dole listy ładowania (za `Harmony`, `Vanilla Expanded Framework`, `Combat Extended`, `CAI-5000` oraz `RocketMan`).
-3. Podczas gry naciśnij klawisz **`F11`**, aby włączyć lub ukryć nakładkę telemetryczną pokazującą na żywo TPS, podział pracy na poszczególne wątki CPU oraz liczbę przechwyconych kolizji wątków.
+2. Open **RimPy Mod Manager** (or **RimSort** / in-game Mod Manager):
+   - Enable **Harmony** (`brrainz.harmony`) and **OmniThread Ultimate** (`omnithread.ultimate`).
+   - Click **Sort** — RimPy will automatically place **OmniThread Ultimate** near the bottom of your load order after frameworks and overhaul mods.
+3. Press **`F11`** in-game at any time to toggle the real-time **OmniThread Ultimate Telemetry Overlay** (displaying live TPS, per-thread workload distribution, active worker threads, and thread-safety counters).
 
 ---
 
-## Struktura Repozytorium
+## Repository Structure
 
-- `About/About.xml` & `About/Manifest.xml` — Metadane moda i reguły sortowania dla **RimPy** / **RimSort**.
-- `LoadFolders.xml` — Konfiguracja ścieżek ładowania dla RimWorld `1.4`, `1.5` oraz `1.6`.
-- `1.6/Assemblies/OmniThreadUltimate.dll` — Skompilowana biblioteka moda.
-- `Source/OmniThreadUltimate/` — Pełny kod źródłowy C# (`ParallelTickEngine.cs`, `ModCompatibilityManager.cs`, `MainThreadSyncQueue.cs`, `OmniThreadMod.cs`, `OmniThreadOverlayGUI.cs`, `AutoBenchmarkRunner.cs`).
-- `Benchmarks/` — Zapisane raporty JSON z testów na żywym procesie `RimWorldWin64.exe`.
+- `About/About.xml` & `About/Manifest.xml` — Mod metadata and load-order rules for **RimPy**, **RimSort**, and **Mod Manager**.
+- `LoadFolders.xml` — Multi-version folder mapping for RimWorld `1.3`, `1.4`, `1.5`, `1.6`, and `1.7`.
+- `1.6/Assemblies/OmniThreadUltimate.dll` — Compiled assembly.
+- `Source/OmniThreadUltimate/` — Full C# source code (`ParallelTickEngine.cs`, `ModCompatibilityManager.cs`, `MainThreadSyncQueue.cs`, `OmniThreadMod.cs`, `OmniThreadGUI.cs`, `AutoBenchmarkRunner.cs`, `SpatialPartitioner.cs`).
+- `Benchmarks/` — Verified JSON benchmark reports captured from live `RimWorldWin64.exe` runs.
+
+---
+
+## License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
