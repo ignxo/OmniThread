@@ -56,16 +56,63 @@
 
 ---
 
-## Installation (RimPy / RimSort / Manual)
+## How to Install (Step-by-Step Guide)
 
-1. Clone this repository or extract the latest release `.zip` into your `RimWorld/Mods/` directory:
-   ```bash
-   git clone https://github.com/ignxo/OmniThread-Ultimate.git "OmniThreadUltimate"
-   ```
-2. Open **RimPy Mod Manager** (or **RimSort** / in-game Mod Manager):
-   - Enable **Harmony** (`brrainz.harmony`) and **OmniThread Ultimate** (`omnithread.ultimate`).
-   - Click **Sort** — RimPy will automatically place **OmniThread Ultimate** near the bottom of your load order after frameworks and overhaul mods.
-3. Press **`F11`** in-game at any time to toggle the real-time **OmniThread Ultimate Telemetry Overlay** (displaying live TPS, per-thread workload distribution, active worker threads, and thread-safety counters).
+> [!IMPORTANT]
+> **Requirement:** Make sure you have the **[Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)** mod installed and placed at the **very top** of your mod list (above `Core`).
+
+### Step 1: Download the Mod
+Choose **one** of the following easy methods:
+- **Method A (Releases — Easiest):** Go to the [**Releases**](https://github.com/ignxo/OmniThread-Ultimate/releases) section on the right side of this GitHub page and download **`OmniThreadUltimate-v1.6.0.0.zip`**.
+- **Method B (Green Button):** Click the green **`<> Code`** button at the top-right of this page and select **`Download ZIP`**.
+
+---
+
+### Step 2: Unpack into your RimWorld `Mods` Folder
+1. Open the folder where your **RimWorld** is installed and open the **`Mods`** subfolder:
+   - **Steam (Windows):** `C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods`
+   - **GOG / Standalone / Portable:** `<Your RimWorld Folder>\Mods` *(the same folder where `RimWorldWin64.exe` is located -> open `Mods`)*
+2. Extract the downloaded `.zip` archive into the **`Mods`** folder.
+3. **Check the folder structure!** Inside `RimWorld/Mods/OmniThreadUltimate`, you must directly see the `About` folder, `1.6` folder, and `LoadFolders.xml` (make sure there isn't an extra folder inside a folder):
+
+```text
+RimWorld/
+├── RimWorldWin64.exe
+└── Mods/
+    └── OmniThreadUltimate/          <-- Mod folder inside Mods/
+        ├── About/
+        │   ├── About.xml
+        │   ├── Manifest.xml
+        │   └── Preview.png
+        ├── 1.6/
+        │   └── Assemblies/
+        │       └── OmniThreadUltimate.dll
+        └── LoadFolders.xml
+```
+
+---
+
+### Step 3: Enable the Mod (RimPy or In-Game Menu)
+
+#### Option A: Using RimPy Mod Manager / RimSort (Recommended)
+1. Open **RimPy** (or **RimSort**).
+2. Find **OmniThread Ultimate** in the **Inactive** list (left side) and drag it to the **Active** list (right side).
+3. Make sure **Harmony** is also in the **Active** list at the very top.
+4. Click **Sort** — RimPy will automatically place **OmniThread Ultimate** at the **very bottom** of your mod list (below *RocketMan*, *CAI-5000*, and *Combat Extended*).
+5. Click **Save**, then click **Run**!
+
+#### Option B: Using the Standard In-Game Mod Menu (No RimPy)
+1. Launch `RimWorldWin64.exe` and click **Mods** in the main menu.
+2. Enable **Harmony** (place it at the very top, above `Core`).
+3. Enable **OmniThread Ultimate** and drag it to the **very bottom** of your active mods list (last mod on the list).
+4. Click **Close** — the game will automatically restart with the mod loaded.
+
+---
+
+### Step 4: How to Use In-Game
+- **Zero configuration needed:** Multi-threading (**all CPU threads**) turns on **100% automatically** as soon as you load a save or start a new colony.
+- **Live FPS / TPS & Thread Monitor (`F11`):** While playing on a map, press **`F11`** on your keyboard at any time to open or hide the **OmniThread Ultimate** status window in the top-left corner (shows live TPS, tick time in `ms`, and active CPU threads).
+
 
 ---
 
