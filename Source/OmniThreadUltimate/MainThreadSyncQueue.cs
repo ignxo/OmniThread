@@ -24,6 +24,16 @@ namespace OmniThreadUltimate
         public static long CaughtConcurrencyExceptions = 0;
         public static long PreventedThreadHazards = 0;
 
+        public const int MaxEnqueuedPerTick = 4096;
+        public const int MaxThreadEnqueuedPerTick = 1024;
+
+        [ThreadStatic]
+        private static int tsEnqueuedThisTick;
+        [ThreadStatic]
+        private static int tsLastTickStamp;
+
+        public static int CurrentQueueTickStamp = 1;
+
         public static bool IsMainThread
         {
             get
@@ -43,9 +53,36 @@ namespace OmniThreadUltimate
             {
                 return;
             }
+
+            int totalThisTick = Interlocked.Increment(ref EnqueuedThisTick);
+            if (!IsMainThread && InParallelSection)
+            {
+                int stamp = CurrentQueueTickStamp;
+                if (tsLastTickStamp != stamp)
+                {
+                    tsLastTickStamp = stamp;
+                    tsEnqueuedThisTick = 0;
+                }
+                int threadCount = ++tsEnqueuedThisTick;
+                if (threadCount > MaxThreadEnqueuedPerTick)
+                {
+                    tsEnqueuedThisTick = 0;
+                    throw new InvalidOperationException("OmniThread circuit breaker: worker thread enqueued >1024 actions in a single tick (runaway loop aborted).");
+                }
+            }
+
+            if (totalThisTick > MaxEnqueuedPerTick)
+            {
+                if (!IsMainThread && InParallelSection)
+                {
+                    tsEnqueuedThisTick = 0;
+                    throw new InvalidOperationException("OmniThread circuit breaker: total enqueued actions exceeded 4096 in a single tick.");
+                }
+                return;
+            }
+
             Queue.Enqueue(action);
             Interlocked.Increment(ref TotalEnqueuedActions);
-            Interlocked.Increment(ref EnqueuedThisTick);
             Interlocked.Increment(ref PreventedThreadHazards);
         }
 
@@ -55,8 +92,10 @@ namespace OmniThreadUltimate
             {
                 return;
             }
+            CurrentQueueTickStamp++;
+            EnqueuedThisTick = 0;
             Action action;
-            int safetyLimit = 50000;
+            int safetyLimit = 8192;
             while (safetyLimit-- > 0 && Queue.TryDequeue(out action))
             {
                 try
@@ -68,6 +107,9 @@ namespace OmniThreadUltimate
                 {
                     RecordWorkerException("MainThreadSyncQueue.Flush", ex);
                 }
+            }
+            while (Queue.TryDequeue(out action))
+            {
             }
         }
 
@@ -218,12 +260,30 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(Thing), "DeSpawn")]
     public static class Patch_Thing_DeSpawn
     {
+        [ThreadStatic]
+        private static Thing tsLastDeSpawnedThing;
+        [ThreadStatic]
+        private static int tsLastDeSpawnedStamp;
+
         public static bool Prefix(Thing __instance, DestroyMode mode)
         {
             if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
                 return true;
             }
+            if (__instance == null || !__instance.Spawned)
+            {
+                return false;
+            }
+            int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+            if (tsLastDeSpawnedStamp == stamp && ReferenceEquals(tsLastDeSpawnedThing, __instance))
+            {
+                tsLastDeSpawnedThing = null;
+                throw new InvalidOperationException("OmniThread loop guard: Thing.DeSpawn called repeatedly on same Thing in one tick.");
+            }
+            tsLastDeSpawnedStamp = stamp;
+            tsLastDeSpawnedThing = __instance;
+
             Thing thingRef = __instance;
             DestroyMode modeRef = mode;
             MainThreadSyncQueue.Enqueue(delegate
@@ -240,12 +300,40 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(Thing), "Destroy")]
     public static class Patch_Thing_Destroy
     {
+        [ThreadStatic]
+        private static Thing tsLastDestroyedThing;
+        [ThreadStatic]
+        private static int tsLastDestroyedStamp;
+
         public static bool Prefix(Thing __instance, DestroyMode mode)
         {
             if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
                 return true;
             }
+            if (__instance == null || __instance.Destroyed)
+            {
+                return false;
+            }
+            if (__instance.holdingOwner != null)
+            {
+                lock (ParallelTickEngine.GlobalSyncLock)
+                {
+                    if (__instance.holdingOwner != null)
+                    {
+                        __instance.holdingOwner.Remove(__instance);
+                    }
+                }
+            }
+            int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+            if (tsLastDestroyedStamp == stamp && ReferenceEquals(tsLastDestroyedThing, __instance))
+            {
+                tsLastDestroyedThing = null;
+                throw new InvalidOperationException("OmniThread loop guard: Thing.Destroy called repeatedly on same Thing in one tick.");
+            }
+            tsLastDestroyedStamp = stamp;
+            tsLastDestroyedThing = __instance;
+
             Thing thingRef = __instance;
             DestroyMode modeRef = mode;
             MainThreadSyncQueue.Enqueue(delegate

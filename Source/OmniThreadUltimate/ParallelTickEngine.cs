@@ -141,6 +141,7 @@ namespace OmniThreadUltimate
             ActiveWorkersThisTick = 0;
             LastTickListMs = 0f;
             MainThreadSyncQueue.EnqueuedThisTick = 0;
+            MainThreadSyncQueue.CurrentQueueTickStamp++;
             TickStopwatch.Restart();
         }
 
@@ -4082,66 +4083,140 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(MemoryThoughtHandler), "TryGainMemory", new Type[] { typeof(Thought_Memory), typeof(Pawn) })]
     public static class Patch_MemoryThoughtHandler_TryGainMemory
     {
-        public static bool Prefix(MemoryThoughtHandler __instance, Thought_Memory newThought, Pawn otherPawn)
+        public static void Prefix(MemoryThoughtHandler __instance, ref bool __state)
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
             {
-                MemoryThoughtHandler mth = __instance;
-                Thought_Memory tm = newThought;
-                Pawn op = otherPawn;
-                MainThreadSyncQueue.Enqueue(delegate
-                {
-                    if (mth != null && mth.pawn != null && !mth.pawn.Destroyed)
-                    {
-                        mth.TryGainMemory(tm, op);
-                    }
-                });
-                return false;
+                Monitor.Enter(ParallelTickEngine.ThoughtHandlerLock, ref __state);
             }
-            return true;
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.ThoughtHandlerLock);
+            }
         }
     }
 
     [HarmonyPatch(typeof(MemoryThoughtHandler), "RemoveMemory")]
     public static class Patch_MemoryThoughtHandler_RemoveMemory
     {
-        public static bool Prefix(MemoryThoughtHandler __instance, Thought_Memory th)
+        public static void Prefix(MemoryThoughtHandler __instance, ref bool __state)
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
             {
-                MemoryThoughtHandler mth = __instance;
-                Thought_Memory tm = th;
-                MainThreadSyncQueue.Enqueue(delegate
-                {
-                    if (mth != null && tm != null)
-                    {
-                        mth.RemoveMemory(tm);
-                    }
-                });
-                return false;
+                Monitor.Enter(ParallelTickEngine.ThoughtHandlerLock, ref __state);
             }
-            return true;
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.ThoughtHandlerLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MemoryThoughtHandler), "RemoveMemoriesOfDef")]
+    public static class Patch_MemoryThoughtHandler_RemoveMemoriesOfDef
+    {
+        public static void Prefix(MemoryThoughtHandler __instance, ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
+            {
+                Monitor.Enter(ParallelTickEngine.ThoughtHandlerLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.ThoughtHandlerLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MemoryThoughtHandler), "RemoveMemoriesOfDefIf")]
+    public static class Patch_MemoryThoughtHandler_RemoveMemoriesOfDefIf
+    {
+        public static void Prefix(MemoryThoughtHandler __instance, ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
+            {
+                Monitor.Enter(ParallelTickEngine.ThoughtHandlerLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.ThoughtHandlerLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MemoryThoughtHandler), "RemoveMemoriesOfDefWhereOtherPawnIs")]
+    public static class Patch_MemoryThoughtHandler_RemoveMemoriesOfDefWhereOtherPawnIs
+    {
+        public static void Prefix(MemoryThoughtHandler __instance, ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
+            {
+                Monitor.Enter(ParallelTickEngine.ThoughtHandlerLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.ThoughtHandlerLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(MemoryThoughtHandler), "RemoveMemoriesWhereOtherPawnIs")]
+    public static class Patch_MemoryThoughtHandler_RemoveMemoriesWhereOtherPawnIs
+    {
+        public static void Prefix(MemoryThoughtHandler __instance, ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
+            {
+                Monitor.Enter(ParallelTickEngine.ThoughtHandlerLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.ThoughtHandlerLock);
+            }
         }
     }
 
     [HarmonyPatch(typeof(SituationalThoughtHandler), "Notify_SituationalThoughtsDirty")]
     public static class Patch_SituationalThoughtHandler_NotifyDirty
     {
-        public static bool Prefix(SituationalThoughtHandler __instance)
+        public static void Prefix(SituationalThoughtHandler __instance, ref bool __state)
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
             {
-                SituationalThoughtHandler sth = __instance;
-                MainThreadSyncQueue.Enqueue(delegate
-                {
-                    if (sth != null)
-                    {
-                        sth.Notify_SituationalThoughtsDirty();
-                    }
-                });
-                return false;
+                Monitor.Enter(ParallelTickEngine.ThoughtHandlerLock, ref __state);
             }
-            return true;
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.ThoughtHandlerLock);
+            }
         }
     }
 
@@ -4612,44 +4687,41 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(StatWorker), "TryClearCache")]
     public static class Patch_StatWorker_TryClearCache
     {
-        public static bool Prefix(StatWorker __instance)
+        public static void Prefix(StatWorker __instance, ref bool __state)
         {
-            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection || __instance == null)
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
             {
-                return true;
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
             }
-            StatWorker sw = __instance;
-            MainThreadSyncQueue.Enqueue(delegate
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
             {
-                if (sw != null)
-                {
-                    sw.TryClearCache();
-                }
-            });
-            return false;
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
         }
     }
 
     [HarmonyPatch(typeof(StatWorker), "ClearCacheForThing")]
     public static class Patch_StatWorker_ClearCacheForThing
     {
-        public static bool Prefix(StatWorker __instance, Thing thing)
+        public static void Prefix(StatWorker __instance, Thing thing, ref bool __state)
         {
-            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection || __instance == null || thing == null)
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null && thing != null)
             {
-                return true;
+                ThreadLocalStatCache.ClearLocalForThing(__instance, thing);
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
             }
-            ThreadLocalStatCache.ClearLocalForThing(__instance, thing);
-            StatWorker sw = __instance;
-            Thing t = thing;
-            MainThreadSyncQueue.Enqueue(delegate
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
             {
-                if (sw != null && t != null)
-                {
-                    sw.ClearCacheForThing(t);
-                }
-            });
-            return false;
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
         }
     }
 
