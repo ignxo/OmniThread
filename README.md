@@ -62,9 +62,26 @@
 > **Requirement:** Make sure you have the **[Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)** mod installed and placed at the **very top** of your mod list (above `Core`).
 
 ### Step 1: Download the Mod
-Choose **one** of the following easy methods:
-- **Method A (Releases — Easiest):** Go to the [**Releases**](https://github.com/ignxo/OmniThread-Ultimate/releases) section on the right side of this GitHub page and download **`OmniThreadUltimate-v1.6.0.0.zip`**.
-- **Method B (Green Button):** Click the green **`<> Code`** button at the top-right of this page and select **`Download ZIP`**.
+Choose **whichever method you prefer**:
+
+#### Option 1: Download `.zip` from Browser (No commands needed)
+- **From Releases:** Go to [**Releases**](https://github.com/ignxo/OmniThread-Ultimate/releases) on the right side of this page and download **`OmniThreadUltimate-v1.6.0.0.zip`**.
+- **Or via Green Button:** Click the green **`<> Code`** button at the top-right of this page and click **`Download ZIP`**.
+
+#### Option 2: Download via Command Line (`git clone` or PowerShell)
+Open **PowerShell** or **Command Prompt (CMD)** inside your `RimWorld/Mods` folder (or `cd` into it first) and run:
+
+- **Using Git:**
+  ```bash
+  cd "C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods"
+  git clone https://github.com/ignxo/OmniThread-Ultimate.git OmniThreadUltimate
+  ```
+  *(If your game is in a custom folder, replace the path in `cd "..."` with your own `RimWorld\Mods` path — doing this puts the mod directly in the right place and you can skip Step 2!)*
+
+- **Using PowerShell (One-Liner, without Git):**
+  ```powershell
+  Invoke-WebRequest -Uri "https://github.com/ignxo/OmniThread-Ultimate/releases/download/v1.6.0.0/OmniThreadUltimate-v1.6.0.0.zip" -OutFile "$env:TEMP\OmniThreadUltimate.zip"; Expand-Archive -Path "$env:TEMP\OmniThreadUltimate.zip" -DestinationPath ".\OmniThreadUltimate" -Force
+  ```
 
 ---
 
