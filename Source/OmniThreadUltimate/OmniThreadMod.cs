@@ -39,8 +39,7 @@ namespace OmniThreadUltimate
                 ApplyCrossVersionFallbacks(harmony);
                 ModCompatibilityManager.Initialize(harmony);
 
-                Log.Message(string.Format("[OmniThread Ultimate] Initialized successfully! RimWorld={0}, MainThreadId={1}, LogicalCores={2}, IterationLevel={3}, Multithreading={4}, PatchedClasses={5}, AutoTest={6}",
-                    VersionControl.CurrentVersionStringWithRev,
+                Log.Message(string.Format("[OmniThread Ultimate] Initialized successfully! MainThreadId={0}, LogicalCores={1}, IterationLevel={2}, Multithreading={3}, PatchedClasses={4}, AutoTest={5}",
                     MainThreadSyncQueue.MainThreadId,
                     Environment.ProcessorCount,
                     IterationLevel,
@@ -102,7 +101,7 @@ namespace OmniThreadUltimate
             try
             {
                 // RimWorld 1.3 / 1.4 / 1.5 PathFinder.FindPath fallback (replaced by FindPathNow in 1.6)
-                Type pfType = typeof(Verse.AI.PathFinder);
+                Type pfType = AccessTools.TypeByName("Verse.AI.PathFinder");
                 MethodInfo enterLock = AccessTools.Method(typeof(ModCompatibilityManager), "EnterUnifiedModLock");
                 MethodInfo exitLock = AccessTools.Method(typeof(ModCompatibilityManager), "ExitUnifiedModLock");
                 if (pfType != null && enterLock != null && exitLock != null)
