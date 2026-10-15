@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Manifest>
+  <identifier>OmniThreadUltimate</identifier>
+  <version>1.6.0.0</version>
+  <dependencies>
+    <li>brrainz.harmony</li>
+  </dependencies>
+  <loadAfter>
+    <li>brrainz.harmony</li>
+    <li>Ludeon.RimWorld</li>
+    <li>Ludeon.RimWorld.Royalty</li>
+    <li>Ludeon.RimWorld.Ideology</li>
+    <li>Ludeon.RimWorld.Biotech</li>
+    <li>Ludeon.RimWorld.Anomaly</li>
+    <li>Ludeon.RimWorld.Odyssey</li>
+    <li>zetrith.prepatcher</li>
+    <li>UnlimitedHugs.HugsLib</li>
+    <li>OskarPotocki.VanillaFactionsExpanded.Core</li>
+    <li>CETeam.CombatExtended</li>
+    <li>SmashPhil.VehicleFramework</li>
+    <li>com.abobashark.zoologymod</li>
+    <li>Taranchuk.PerformanceOptimizer</li>
+    <li>Krkr.rule56</li>
+    <li>vr.missilegirl</li>
+  </loadAfter>
+  <manifestUri>https://raw.githubusercontent.com/ignxo/OmniThread-Ultimate/main/About/Manifest.xml</manifestUri>
+  <downloadUri>https://github.com/ignxo/OmniThread-Ultimate/releases/latest</downloadUri>
+</Manifest>
