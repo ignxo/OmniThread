@@ -237,12 +237,30 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(Thing), "SpawnSetup")]
     public static class Patch_Thing_SpawnSetup
     {
+        [ThreadStatic]
+        private static Thing tsLastSpawnSetupThing;
+        [ThreadStatic]
+        private static int tsLastSpawnSetupStamp;
+
         public static bool Prefix(Thing __instance, Map map, bool respawningAfterLoad)
         {
             if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
                 return true;
             }
+            if (__instance == null || map == null)
+            {
+                return false;
+            }
+            int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+            if (tsLastSpawnSetupStamp == stamp && ReferenceEquals(tsLastSpawnSetupThing, __instance))
+            {
+                tsLastSpawnSetupThing = null;
+                throw new InvalidOperationException("OmniThread loop guard: Thing.SpawnSetup called repeatedly on same Thing in one tick.");
+            }
+            tsLastSpawnSetupStamp = stamp;
+            tsLastSpawnSetupThing = __instance;
+
             Thing thingRef = __instance;
             Map mapRef = map;
             bool respawnRef = respawningAfterLoad;
@@ -350,6 +368,11 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(GenSpawn), "Spawn", new Type[] { typeof(Thing), typeof(IntVec3), typeof(Map), typeof(Rot4), typeof(WipeMode), typeof(bool), typeof(bool) })]
     public static class Patch_GenSpawn_Spawn
     {
+        [ThreadStatic]
+        private static Thing tsLastSpawnedThing;
+        [ThreadStatic]
+        private static int tsLastSpawnedStamp;
+
         public static bool Prefix(Thing newThing, IntVec3 loc, Map map, Rot4 rot, WipeMode wipeMode, bool respawningAfterLoad, bool forbidLeavings, ref Thing __result)
         {
             if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
@@ -361,6 +384,25 @@ namespace OmniThreadUltimate
                 __result = null;
                 return false;
             }
+            if (newThing.holdingOwner != null)
+            {
+                lock (ParallelTickEngine.GlobalSyncLock)
+                {
+                    if (newThing.holdingOwner != null)
+                    {
+                        newThing.holdingOwner.Remove(newThing);
+                    }
+                }
+            }
+            int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+            if (tsLastSpawnedStamp == stamp && ReferenceEquals(tsLastSpawnedThing, newThing))
+            {
+                tsLastSpawnedThing = null;
+                throw new InvalidOperationException("OmniThread loop guard: GenSpawn.Spawn called repeatedly on same Thing in one tick.");
+            }
+            tsLastSpawnedStamp = stamp;
+            tsLastSpawnedThing = newThing;
+
             if (!newThing.Spawned)
             {
                 newThing.Rotation = rot;

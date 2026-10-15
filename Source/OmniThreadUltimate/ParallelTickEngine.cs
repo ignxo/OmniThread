@@ -5111,15 +5111,62 @@ namespace OmniThreadUltimate
         }
     }
 
+    [HarmonyPatch]
+    public static class Patch_GenPlace_Lock
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodInfo[] methods = typeof(GenPlace).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            for (int i = 0; i < methods.Length; i++)
+            {
+                MethodInfo m = methods[i];
+                if (m.Name == "TryPlaceThing" || m.Name == "TryPlaceDirect" || m.Name == "PlaceSpotQualityAt" || m.Name == "HaulPlaceBlockerIn")
+                {
+                    yield return m;
+                }
+            }
+        }
+
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(Pawn), "Kill")]
     public static class Patch_Pawn_Kill
     {
+        [ThreadStatic]
+        private static Pawn tsLastKilledPawn;
+        [ThreadStatic]
+        private static int tsLastKilledStamp;
+
         public static bool Prefix(Pawn __instance, DamageInfo? dinfo, Hediff exactCulprit)
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
             {
                 if (__instance != null && !__instance.Dead)
                 {
+                    int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+                    if (tsLastKilledStamp == stamp && ReferenceEquals(tsLastKilledPawn, __instance))
+                    {
+                        tsLastKilledPawn = null;
+                        throw new InvalidOperationException("OmniThread loop guard: Pawn.Kill called repeatedly on same Pawn in one tick.");
+                    }
+                    tsLastKilledStamp = stamp;
+                    tsLastKilledPawn = __instance;
+
                     Pawn p = __instance;
                     DamageInfo? d = dinfo;
                     Hediff h = exactCulprit;
