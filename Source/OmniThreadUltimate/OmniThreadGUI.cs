@@ -10,7 +10,7 @@ namespace OmniThreadUltimate
 {
     public static class OmniThreadGUI
     {
-        public static bool ShowOverlay = true;
+        public static bool ShowOverlay = false;
         private static int lastFrameTicksGame = -1;
         private static float lastTpsSampleTime = 0f;
         public static float RealWallTps = 0f;
@@ -24,21 +24,22 @@ namespace OmniThreadUltimate
                 return;
             }
 
-            UpdateWallTpsCounter();
+            if (Event.current != null && Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.F10)
+            {
+                ShowOverlay = !ShowOverlay;
+                Event.current.Use();
+            }
 
             if (!ShowOverlay)
             {
-                Rect minRect = new Rect(14f, 14f, 160f, 26f);
-                if (Widgets.ButtonText(minRect, "OmniThread HUD [+]"))
-                {
-                    ShowOverlay = true;
-                }
                 return;
             }
 
+            UpdateWallTpsCounter();
+
             float panelWidth = 360f;
             float panelHeight = 330f;
-            Rect panelRect = new Rect(14f, 14f, panelWidth, panelHeight);
+            Rect panelRect = new Rect(180f, 14f, panelWidth, panelHeight);
 
             Widgets.DrawBoxSolid(panelRect, new Color(0.06f, 0.08f, 0.12f, 0.88f));
             GUI.color = new Color(0.2f, 0.75f, 0.95f, 0.9f);
@@ -54,12 +55,12 @@ namespace OmniThreadUltimate
             float innerWidth = panelWidth - 20f;
 
             GUI.color = new Color(0.3f, 0.9f, 1f);
-            Widgets.Label(new Rect(leftX, curY, innerWidth - 70f, 22f),
+            Widgets.Label(new Rect(leftX, curY, innerWidth - 85f, 22f),
                 string.Format("OMNITHREAD ULTIMATE [Iter {0}]", OmniThreadMod.IterationLevel));
             GUI.color = Color.white;
 
-            Rect toggleHudBtn = new Rect(panelRect.xMax - 68f, curY, 60f, 20f);
-            if (Widgets.ButtonText(toggleHudBtn, "Hide"))
+            Rect toggleHudBtn = new Rect(panelRect.xMax - 82f, curY, 74f, 20f);
+            if (Widgets.ButtonText(toggleHudBtn, "Hide [F10]"))
             {
                 ShowOverlay = false;
             }

@@ -20,7 +20,7 @@ namespace OmniThreadUltimate
         public static readonly object GlobalSyncLock = new object();
         public static readonly object PositionLock = GlobalSyncLock;
         public static readonly object PathFinderLock = GlobalSyncLock;
-        public static readonly object PathPoolLock = GlobalSyncLock;
+        public static readonly object PathPoolLock = new object();
         public static readonly object AttackTargetsLock = GlobalSyncLock;
         public static readonly object RegionTraverserLock = GlobalSyncLock;
         public static readonly object ReachabilityLock = GlobalSyncLock;
@@ -28,7 +28,7 @@ namespace OmniThreadUltimate
         public static readonly object HealthTrackerLock = GlobalSyncLock;
         public static readonly object MapPawnsLock = GlobalSyncLock;
         public static readonly object WorkSettingsLock = GlobalSyncLock;
-        public static readonly object JobPoolLock = GlobalSyncLock;
+        public static readonly object JobPoolLock = new object();
         public static readonly object HostilityFleeLock = GlobalSyncLock;
         public static readonly object WanderUtilityLock = GlobalSyncLock;
         public static readonly object AttackTargetFinderLock = GlobalSyncLock;
@@ -40,12 +40,14 @@ namespace OmniThreadUltimate
         public static readonly object CapacitiesLock = GlobalSyncLock;
 
         private static Thing[] Iter5WorkBuffer = new Thing[4096];
+        private static Thing[] Iter5MainThreadBuffer = new Thing[4096];
+        private static int Iter5MainThreadCount = 0;
 
         public static readonly ConcurrentDictionary<int, long> ThreadWorkCounts = new ConcurrentDictionary<int, long>();
         public static readonly ConcurrentDictionary<int, int> ThreadTickWorkCounts = new ConcurrentDictionary<int, int>();
 
-        private static readonly long[] FastThreadWorkCounts = new long[512];
-        private static readonly int[] FastThreadSeenStamp = new int[512];
+        private static readonly long[] FastThreadWorkCounts = new long[16384];
+        private static readonly int[] FastThreadSeenStamp = new int[16384];
         private static int CurrentTickStamp = 1;
         private static int ActiveWorkersThisTick = 0;
 
@@ -102,7 +104,7 @@ namespace OmniThreadUltimate
         public static void RecordThreadWork()
         {
             int tid = Thread.CurrentThread.ManagedThreadId;
-            if ((uint)tid < 512u)
+            if ((uint)tid < 16384u)
             {
                 FastThreadWorkCounts[tid]++;
                 int stamp = CurrentTickStamp;
@@ -407,7 +409,7 @@ namespace OmniThreadUltimate
         private static void ExecuteIter5WorkerLoop(Thing[] workBuf, int workCount, int ticksGame, bool isNormalTick)
         {
             int tid = Thread.CurrentThread.ManagedThreadId;
-            if ((uint)tid < 512u)
+            if ((uint)tid < 16384u)
             {
                 int stamp = CurrentTickStamp;
                 if (FastThreadSeenStamp[tid] != stamp)
@@ -440,15 +442,24 @@ namespace OmniThreadUltimate
                     Type tType = thing.GetType();
                     if (tType != typeof(Pawn) && ModCompatibilityManager.ShouldTickOnMainThread(thing, tType))
                     {
-                        Thing mtThing = thing;
                         Interlocked.Increment(ref ModCompatibilityManager.MainThreadRoutedModThingTicks);
-                        MainThreadSyncQueue.Enqueue(delegate
+                        int mtSlot = Interlocked.Increment(ref Iter5MainThreadCount) - 1;
+                        Thing[] mtBuf = Iter5MainThreadBuffer;
+                        if ((uint)mtSlot < (uint)mtBuf.Length)
                         {
-                            if (mtThing != null && !mtThing.Destroyed && mtThing.Spawned)
+                            mtBuf[mtSlot] = thing;
+                        }
+                        else
+                        {
+                            Thing mtThing = thing;
+                            MainThreadSyncQueue.Enqueue(delegate
                             {
-                                mtThing.DoTick();
-                            }
-                        });
+                                if (mtThing != null && !mtThing.Destroyed && mtThing.Spawned)
+                                {
+                                    mtThing.DoTick();
+                                }
+                            });
+                        }
                         continue;
                     }
 
@@ -480,7 +491,7 @@ namespace OmniThreadUltimate
                 }
             }
 
-            if ((uint)tid < 512u && localThingTicks > 0)
+            if ((uint)tid < 16384u && localThingTicks > 0)
             {
                 Interlocked.Add(ref FastThreadWorkCounts[tid], localThingTicks);
             }
@@ -501,7 +512,7 @@ namespace OmniThreadUltimate
         private static void ExecuteIteration5DirectChunked(List<Thing> currentBucket, ParallelOptions parallelOptions, bool isNormalTick)
         {
             int count = currentBucket.Count;
-            if (count < 8)
+            if ((!isNormalTick && count < 64) || count < 16)
             {
                 for (int i = 0; i < count; i++)
                 {
@@ -526,8 +537,14 @@ namespace OmniThreadUltimate
             Thing[] workBuf = Iter5WorkBuffer;
             if (workBuf.Length < count)
             {
-                workBuf = new Thing[Math.Max(workBuf.Length * 2, count + 1024)];
+                int newCap = Math.Max(workBuf.Length * 2, count + 1024);
+                workBuf = new Thing[newCap];
                 Iter5WorkBuffer = workBuf;
+                Iter5MainThreadBuffer = new Thing[newCap];
+            }
+            else if (Iter5MainThreadBuffer.Length < count)
+            {
+                Iter5MainThreadBuffer = new Thing[workBuf.Length];
             }
 
             // Staggered LPT Interleaving (1 from right [Pawn] + 3 from left [light Things]):
@@ -566,6 +583,7 @@ namespace OmniThreadUltimate
             int bgWorkersToWake = Math.Min(numWorkers - 1, MaxBackgroundWorkers);
 
             Iter5SharedWorkIndex = -1;
+            Iter5MainThreadCount = 0;
             Iter5CurrentWorkCount = workCount;
             Iter5CurrentTicksGame = ticksGame;
             Iter5CurrentIsNormalTick = isNormalTick;
@@ -593,6 +611,30 @@ namespace OmniThreadUltimate
             finally
             {
                 MainThreadSyncQueue.InParallelSection = false;
+            }
+
+            int mtCount = Math.Min(Iter5MainThreadCount, Iter5MainThreadBuffer.Length);
+            if (mtCount > 0)
+            {
+                Thing[] mtBuf = Iter5MainThreadBuffer;
+                for (int m = 0; m < mtCount; m++)
+                {
+                    Thing mtThing = mtBuf[m];
+                    mtBuf[m] = null;
+                    if (mtThing != null && !mtThing.Destroyed && mtThing.Spawned)
+                    {
+                        try
+                        {
+                            RecordThreadWork();
+                            mtThing.DoTick();
+                        }
+                        catch (Exception ex)
+                        {
+                            MainThreadSyncQueue.RecordWorkerException("Iter5MainThreadRouted.DoTick(" + mtThing.ToStringSafe() + ")", ex);
+                        }
+                    }
+                }
+                Iter5MainThreadCount = 0;
             }
 
             MainThreadSyncQueue.Flush();
@@ -4478,7 +4520,7 @@ namespace OmniThreadUltimate
             }
 
             float cached;
-            if (ThreadLocalCapacityCache.TryGet(__instance, capacity, 120, out cached))
+            if (ThreadLocalCapacityCache.TryGet(__instance, capacity, 600, out cached))
             {
                 __result = cached;
                 return false;
@@ -4552,24 +4594,24 @@ namespace OmniThreadUltimate
         private sealed class StatCacheEntry
         {
             public readonly int WorkerHash;
-            public readonly int ThingId;
-            public readonly bool ApplyPost;
+            public readonly int KeyId;
+            public readonly int ModeFlags;
             public readonly int Tick;
             public readonly int Epoch;
             public readonly float Value;
 
-            public StatCacheEntry(int workerHash, int thingId, bool applyPost, int tick, int epoch, float value)
+            public StatCacheEntry(int workerHash, int keyId, int modeFlags, int tick, int epoch, float value)
             {
                 WorkerHash = workerHash;
-                ThingId = thingId;
-                ApplyPost = applyPost;
+                KeyId = keyId;
+                ModeFlags = modeFlags;
                 Tick = tick;
                 Epoch = epoch;
                 Value = value;
             }
         }
 
-        private const int SlotMask = 32767;
+        private const int SlotMask = 65535;
         private static readonly StatCacheEntry[] SharedSlots = new StatCacheEntry[SlotMask + 1];
         private static readonly int[] ThingEpoch = new int[8192];
 
@@ -4581,27 +4623,21 @@ namespace OmniThreadUltimate
             }
             if (thing == null)
             {
-                lock (ParallelTickEngine.GlobalSyncLock)
-                {
-                    StatRequest emptyReq = StatRequest.ForEmpty();
-                    float v = worker.GetValueUnfinalized(emptyReq, applyPostProcess);
-                    worker.FinalizeValue(emptyReq, ref v, applyPostProcess);
-                    return v;
-                }
+                return GetOrAddRequest(worker, StatRequest.ForEmpty(), applyPostProcess, ttlTicks);
             }
 
             int thingId = thing.thingIDNumber;
             int workerHash = RuntimeHelpers.GetHashCode(worker);
             int ticksGame = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
             int epoch = ThingEpoch[thingId & 8191];
-            int postBit = applyPostProcess ? 1 : 0;
-            int idx = (((workerHash * 397) ^ (thingId * 17)) + postBit) & SlotMask;
+            int modeFlags = applyPostProcess ? 1 : 0;
+            int idx = (((workerHash * 397) ^ (thingId * 17)) + modeFlags) & SlotMask;
 
             StatCacheEntry entry = SharedSlots[idx];
             if (entry != null &&
                 entry.WorkerHash == workerHash &&
-                entry.ThingId == thingId &&
-                entry.ApplyPost == applyPostProcess &&
+                entry.KeyId == thingId &&
+                entry.ModeFlags == modeFlags &&
                 entry.Epoch == epoch &&
                 (ticksGame - entry.Tick) <= ttlTicks)
             {
@@ -4614,8 +4650,8 @@ namespace OmniThreadUltimate
                 StatCacheEntry recheck = SharedSlots[idx];
                 if (recheck != null &&
                     recheck.WorkerHash == workerHash &&
-                    recheck.ThingId == thingId &&
-                    recheck.ApplyPost == applyPostProcess &&
+                    recheck.KeyId == thingId &&
+                    recheck.ModeFlags == modeFlags &&
                     recheck.Epoch == epoch &&
                     (ticksGame - recheck.Tick) <= ttlTicks)
                 {
@@ -4626,7 +4662,114 @@ namespace OmniThreadUltimate
                 computed = worker.GetValueUnfinalized(req, applyPostProcess);
                 worker.FinalizeValue(req, ref computed, applyPostProcess);
 
-                SharedSlots[idx] = new StatCacheEntry(workerHash, thingId, applyPostProcess, ticksGame, epoch, computed);
+                SharedSlots[idx] = new StatCacheEntry(workerHash, thingId, modeFlags, ticksGame, epoch, computed);
+            }
+            return computed;
+        }
+
+        public static float GetOrAddRequest(StatWorker worker, StatRequest req, bool applyPostProcess, int ttlTicks)
+        {
+            if (worker == null)
+            {
+                return 0f;
+            }
+            if (req.HasThing && req.Thing != null)
+            {
+                return GetOrAdd(worker, req.Thing, applyPostProcess, ttlTicks);
+            }
+
+            int reqHash = req.GetHashCode();
+            int workerHash = RuntimeHelpers.GetHashCode(worker);
+            int ticksGame = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            int modeFlags = (applyPostProcess ? 1 : 0) | 4;
+            int idx = (((workerHash * 397) ^ (reqHash * 31)) + modeFlags) & SlotMask;
+
+            StatCacheEntry entry = SharedSlots[idx];
+            if (entry != null &&
+                entry.WorkerHash == workerHash &&
+                entry.KeyId == reqHash &&
+                entry.ModeFlags == modeFlags &&
+                (ticksGame - entry.Tick) <= ttlTicks)
+            {
+                return entry.Value;
+            }
+
+            float computed;
+            lock (ParallelTickEngine.GlobalSyncLock)
+            {
+                StatCacheEntry recheck = SharedSlots[idx];
+                if (recheck != null &&
+                    recheck.WorkerHash == workerHash &&
+                    recheck.KeyId == reqHash &&
+                    recheck.ModeFlags == modeFlags &&
+                    (ticksGame - recheck.Tick) <= ttlTicks)
+                {
+                    return recheck.Value;
+                }
+
+                computed = worker.GetValueUnfinalized(req, applyPostProcess);
+                worker.FinalizeValue(req, ref computed, applyPostProcess);
+
+                SharedSlots[idx] = new StatCacheEntry(workerHash, reqHash, modeFlags, ticksGame, 0, computed);
+            }
+            return computed;
+        }
+
+        public static float GetOrAddUnfinalized(StatWorker worker, StatRequest req, bool applyPostProcess, int ttlTicks)
+        {
+            if (worker == null)
+            {
+                return 0f;
+            }
+
+            int workerHash = RuntimeHelpers.GetHashCode(worker);
+            int ticksGame = Find.TickManager != null ? Find.TickManager.TicksGame : 0;
+            int keyId;
+            int epoch;
+            int modeFlags = (applyPostProcess ? 1 : 0) | 2;
+
+            if (req.HasThing && req.Thing != null)
+            {
+                keyId = req.Thing.thingIDNumber;
+                epoch = ThingEpoch[keyId & 8191];
+            }
+            else
+            {
+                keyId = req.GetHashCode();
+                epoch = 0;
+                modeFlags |= 4;
+            }
+
+            int idx = (((workerHash * 397) ^ (keyId * 23)) + modeFlags) & SlotMask;
+
+            StatCacheEntry entry = SharedSlots[idx];
+            if (entry != null &&
+                entry.WorkerHash == workerHash &&
+                entry.KeyId == keyId &&
+                entry.ModeFlags == modeFlags &&
+                entry.Epoch == epoch &&
+                (ticksGame - entry.Tick) <= ttlTicks)
+            {
+                return entry.Value;
+            }
+
+            float computed;
+            lock (ParallelTickEngine.GlobalSyncLock)
+            {
+                StatCacheEntry recheck = SharedSlots[idx];
+                if (recheck != null &&
+                    recheck.WorkerHash == workerHash &&
+                    recheck.KeyId == keyId &&
+                    recheck.ModeFlags == modeFlags &&
+                    recheck.Epoch == epoch &&
+                    (ticksGame - recheck.Tick) <= ttlTicks)
+                {
+                    return recheck.Value;
+                }
+
+                computed = worker.GetValueUnfinalized(req, applyPostProcess);
+
+                SharedSlots[idx] = new StatCacheEntry(workerHash, keyId, modeFlags, ticksGame, epoch, computed);
             }
             return computed;
         }
@@ -4652,7 +4795,7 @@ namespace OmniThreadUltimate
                 return true;
             }
 
-            int ttl = cacheStaleAfterTicks > 0 ? cacheStaleAfterTicks : 120;
+            int ttl = cacheStaleAfterTicks > 0 ? Math.Max(cacheStaleAfterTicks, 250) : 250;
             __result = ThreadLocalStatCache.GetOrAdd(__instance, thing, applyPostProcess, ttl);
             return false;
         }
@@ -4670,17 +4813,12 @@ namespace OmniThreadUltimate
 
             if (req.HasThing && req.Thing != null)
             {
-                __result = ThreadLocalStatCache.GetOrAdd(__instance, req.Thing, applyPostProcess, 120);
+                __result = ThreadLocalStatCache.GetOrAdd(__instance, req.Thing, applyPostProcess, 250);
                 return false;
             }
 
-            lock (ParallelTickEngine.GlobalSyncLock)
-            {
-                float val = __instance.GetValueUnfinalized(req, applyPostProcess);
-                __instance.FinalizeValue(req, ref val, applyPostProcess);
-                __result = val;
-                return false;
-            }
+            __result = ThreadLocalStatCache.GetOrAddRequest(__instance, req, applyPostProcess, 600);
+            return false;
         }
     }
 

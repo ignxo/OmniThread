@@ -53,6 +53,7 @@ namespace OmniThreadUltimate
 
             if (IsAutoTestMode)
             {
+                OmniThreadGUI.ShowOverlay = true;
                 Log.Message(string.Format("[OmniThread Ultimate] -autotest detected! IterationLevel={0}, EnableMultithreading={1}",
                     OmniThreadMod.IterationLevel, OmniThreadMod.EnableMultithreading));
                 EnsureModActiveInModsConfig();

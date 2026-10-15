@@ -49,6 +49,7 @@ namespace OmniThreadUltimate
         private static MethodInfo[] CAIMapCompGetters;
         private static bool[] PreWarmedThingIdFlags = new bool[262144];
         private static readonly HashSet<int> PreWarmedMapIds = new HashSet<int>();
+        private static readonly Dictionary<int, int> LastPreWarmedMapThingCounts = new Dictionary<int, int>(8);
 
         public static void Initialize(Harmony harmony)
         {
@@ -59,6 +60,8 @@ namespace OmniThreadUltimate
                 BaseMainThreadTypes.Clear();
                 ActiveModNames.Clear();
                 AppliedCompatibilityRules.Clear();
+                PreWarmedMapIds.Clear();
+                LastPreWarmedMapThingCounts.Clear();
                 AppliedModCompatPatchesCount = 0;
 
                 // Fast-path known safe vanilla concrete types
@@ -216,24 +219,27 @@ namespace OmniThreadUltimate
             }
 
             Type tType = thing.GetType();
-            if (tType != typeof(Pawn))
+            if (tType != typeof(Pawn) && tType.Assembly != typeof(Thing).Assembly && ex != null)
             {
-                bool alreadyMarked;
-                if (!TypeMainThreadDecisionCache.TryGetValue(tType, out alreadyMarked) || !alreadyMarked)
-                {
-                    TypeMainThreadDecisionCache[tType] = true;
-                    Interlocked.Increment(ref AutoSafeModFallbackTypesCount);
-                }
+                string msg = ex.Message ?? string.Empty;
+                string stack = ex.StackTrace ?? string.Empty;
+                bool isUnityMainThreadError =
+                    (ex is UnityEngine.UnityException) ||
+                    msg.IndexOf("main thread", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    stack.IndexOf("CompareBaseObjectsInternal", StringComparison.Ordinal) >= 0 ||
+                    stack.IndexOf("get_transform", StringComparison.Ordinal) >= 0 ||
+                    stack.IndexOf("get_gameObject", StringComparison.Ordinal) >= 0;
 
-                Thing thingRef = thing;
-                MainThreadSyncQueue.Enqueue(delegate
+                if (isUnityMainThreadError)
                 {
-                    if (thingRef != null && !thingRef.Destroyed && thingRef.Spawned)
+                    bool alreadyMarked;
+                    if (!TypeMainThreadDecisionCache.TryGetValue(tType, out alreadyMarked) || !alreadyMarked)
                     {
-                        thingRef.DoTick();
+                        TypeMainThreadDecisionCache[tType] = true;
+                        Interlocked.Increment(ref AutoSafeModFallbackTypesCount);
                     }
-                });
-                return true;
+                    return true;
+                }
             }
 
             return false;
@@ -456,9 +462,25 @@ namespace OmniThreadUltimate
                         if (map.listerThings != null && map.listerThings.AllThings != null)
                         {
                             List<Thing> allThings = map.listerThings.AllThings;
-                            if (isNewMap || scanTailThisTick)
+                            int allCount = allThings.Count;
+                            if (isNewMap)
                             {
-                                PreWarmThingList(allThings, 0);
+                                PreWarmThingList(allThings, 0, true);
+                                LastPreWarmedMapThingCounts[map.uniqueID] = allCount;
+                            }
+                            else if (scanTailThisTick)
+                            {
+                                int lastCount;
+                                if (!LastPreWarmedMapThingCounts.TryGetValue(map.uniqueID, out lastCount))
+                                {
+                                    lastCount = 0;
+                                }
+                                if (allCount > lastCount)
+                                {
+                                    int startIdx = Math.Max(0, lastCount - 8);
+                                    PreWarmThingList(allThings, startIdx, false);
+                                }
+                                LastPreWarmedMapThingCounts[map.uniqueID] = allCount;
                             }
                         }
                     }
@@ -466,7 +488,7 @@ namespace OmniThreadUltimate
 
                 if (currentBucket != null)
                 {
-                    PreWarmThingList(currentBucket, 0);
+                    PreWarmThingList(currentBucket, 0, false);
                 }
             }
             catch
@@ -474,7 +496,7 @@ namespace OmniThreadUltimate
             }
         }
 
-        private static void PreWarmThingList(List<Thing> things, int startIndex)
+        private static void PreWarmThingList(List<Thing> things, int startIndex, bool forcePawnGear)
         {
             int count = things.Count;
             for (int i = startIndex; i < count; i++)
@@ -486,31 +508,34 @@ namespace OmniThreadUltimate
                     continue;
                 }
 
-                PreWarmSingleThingWithComps(twc);
+                bool newlyWarmed = PreWarmSingleThingWithComps(twc);
 
                 Pawn pawn = twc as Pawn;
                 if (pawn != null)
                 {
-                    if (pawn.equipment != null)
+                    if (newlyWarmed || forcePawnGear)
                     {
-                        List<ThingWithComps> eqList = pawn.equipment.AllEquipmentListForReading;
-                        if (eqList != null)
+                        if (pawn.equipment != null)
                         {
-                            for (int e = 0; e < eqList.Count; e++)
+                            List<ThingWithComps> eqList = pawn.equipment.AllEquipmentListForReading;
+                            if (eqList != null)
                             {
-                                PreWarmSingleThingWithComps(eqList[e]);
+                                for (int e = 0; e < eqList.Count; e++)
+                                {
+                                    PreWarmSingleThingWithComps(eqList[e]);
+                                }
                             }
                         }
-                    }
 
-                    if (pawn.apparel != null)
-                    {
-                        List<Apparel> appList = pawn.apparel.WornApparel;
-                        if (appList != null)
+                        if (pawn.apparel != null)
                         {
-                            for (int a = 0; a < appList.Count; a++)
+                            List<Apparel> appList = pawn.apparel.WornApparel;
+                            if (appList != null)
                             {
-                                PreWarmSingleThingWithComps(appList[a]);
+                                for (int a = 0; a < appList.Count; a++)
+                                {
+                                    PreWarmSingleThingWithComps(appList[a]);
+                                }
                             }
                         }
                     }
@@ -523,17 +548,17 @@ namespace OmniThreadUltimate
             }
         }
 
-        private static void PreWarmSingleThingWithComps(ThingWithComps twc)
+        private static bool PreWarmSingleThingWithComps(ThingWithComps twc)
         {
             if (twc == null)
             {
-                return;
+                return false;
             }
 
             int id = twc.thingIDNumber;
             if (id < 0)
             {
-                return;
+                return false;
             }
 
             bool[] flags = PreWarmedThingIdFlags;
@@ -549,7 +574,7 @@ namespace OmniThreadUltimate
 
             if (flags[id])
             {
-                return;
+                return false;
             }
             flags[id] = true;
 
@@ -578,6 +603,7 @@ namespace OmniThreadUltimate
                 // Storing either the component instance OR null guarantees TryGetValue(id, out val) returns true!
                 CAICompDicts[c][boxedId] = foundComp;
             }
+            return true;
         }
 
         private static void ApplyCompatibilityPatches(Harmony harmony)
@@ -776,11 +802,11 @@ namespace OmniThreadUltimate
             PatchAllOverloadsWithUnifiedLock(harmony, typeof(FloodFiller), "FloodFill", "Verse: FloodFiller.FloodFill (Unified Lock)");
 
             // CombatAI TKCache / TKVCache / Dictionary / HashSet mutating methods
+            // Note: IsDormant, TryGetAvoidanceReader, TryGetSightReader, and GetCombatPersonality are lock-free or leaf-locked via PreWarmBeforeParallelTick
             PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.CombatAI_Utility", new string[]
             {
-                "IsDormant", "TryGetNextDutyDest", "IsApproachingMeleeTarget", "TryGetAttackVerb",
-                "GetCombatPersonality", "GetMovingShiftedPosition", "TryGetAvoidanceReader",
-                "TryGetSightReader", "GetFloatGrid", "GetCellFlooder"
+                "TryGetNextDutyDest", "IsApproachingMeleeTarget", "TryGetAttackVerb",
+                "GetMovingShiftedPosition", "GetFloatGrid", "GetCellFlooder"
             });
 
             PatchTypeMethodsWithLeafLock(harmony, "CombatAI.PersonalityTacker", new string[]
@@ -1004,7 +1030,11 @@ namespace OmniThreadUltimate
             PatchTypeMethodsWithUnifiedLock(harmony, "PrisonerRealism.SurrenderUtility", new string[] { "TrySurrender", "DoSurrender" });
 
             // 11. Popular Community Mods (Performance Optimizer, Hospitality, Dubs Bad Hygiene, Giddy-Up, Simple Sidearms, Pick Up And Haul, CommonSense)
-            PatchTypeMethodsWithUnifiedLock(harmony, "PerformanceOptimizer.Optimization_FasterGetCompReplacement", new string[] { "Prefix" });
+            Type perfOptGetCompType = FindModType("PerformanceOptimizer.Optimization_FasterGetCompReplacement");
+            if (perfOptGetCompType != null)
+            {
+                PatchMethodSkipInParallel(harmony, perfOptGetCompType, "Prefix", "PerformanceOptimizer: Optimization_FasterGetCompReplacement.Prefix (Skip in Parallel)");
+            }
             PatchTypeMethodsWithUnifiedLock(harmony, "Hospitality.MainTabWindow_Hospitality", new string[] { "Notify_PawnLeft" });
             PatchTypeMethodsWithUnifiedLock(harmony, "DubsBadHygiene.CompPipe", new string[] { "CompTick" });
             PatchTypeMethodsWithUnifiedLock(harmony, "PeteTimesSix.SimpleSidearms.Utilities.StatCalculator", new string[] { "canUseSidearmInstance" });
@@ -1024,15 +1054,9 @@ namespace OmniThreadUltimate
 
             try
             {
+                // Only scan rare combat/food/target methods — never per-tick Pawn/Pather/Health/Needs/Job methods!
                 MethodBase[] coreTickMethods = new MethodBase[]
                 {
-                    AccessTools.Method(typeof(Pawn), "Tick"),
-                    AccessTools.Method(typeof(Pawn_PathFollower), "PatherTick"),
-                    AccessTools.Method(typeof(Pawn_HealthTracker), "HealthTick"),
-                    AccessTools.Method(typeof(Pawn_NeedsTracker), "NeedsTrackerTick"),
-                    AccessTools.Method(typeof(Pawn_JobTracker), "JobTrackerTick"),
-                    AccessTools.Method(typeof(Pawn_MindState), "MindStateTick"),
-                    AccessTools.Method(typeof(Pawn_InteractionsTracker), "InteractionsTrackerTick"),
                     AccessTools.Method(typeof(Verb), "TryStartCastOn", new Type[] { typeof(LocalTargetInfo), typeof(LocalTargetInfo), typeof(bool), typeof(bool), typeof(bool), typeof(bool) }),
                     AccessTools.Method(typeof(Verb), "TryCastNextBurstShot"),
                     AccessTools.Method(typeof(FoodUtility), "BestFoodSourceOnMap"),
@@ -1061,6 +1085,46 @@ namespace OmniThreadUltimate
             {
                 Log.Warning("[OmniThread Ultimate] ScanAndProtectThirdPartyModHooks warning: " + ex.Message);
             }
+        }
+
+        private static bool DeclaringTypeHasStaticCollections(Type declType)
+        {
+            if (declType == null)
+            {
+                return false;
+            }
+            try
+            {
+                FieldInfo[] fields = declType.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    FieldInfo f = fields[i];
+                    if (f == null || f.IsLiteral || f.IsInitOnly)
+                    {
+                        continue;
+                    }
+                    Type ft = f.FieldType;
+                    if (ft == null)
+                    {
+                        continue;
+                    }
+                    if (typeof(IDictionary).IsAssignableFrom(ft) || typeof(ICollection).IsAssignableFrom(ft))
+                    {
+                        return true;
+                    }
+                    string fn = ft.Name;
+                    if (fn.StartsWith("Dictionary`", StringComparison.Ordinal) ||
+                        fn.StartsWith("HashSet`", StringComparison.Ordinal) ||
+                        fn.StartsWith("List`", StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return false;
         }
 
         private static void ProtectHarmonyPatchList(Harmony harmony, System.Collections.ObjectModel.ReadOnlyCollection<Patch> patches)
@@ -1096,6 +1160,11 @@ namespace OmniThreadUltimate
                 }
 
                 if (PatchedMethods.Contains(patchMethod) || SkipPatchedMethods.Contains(patchMethod))
+                {
+                    continue;
+                }
+
+                if (!DeclaringTypeHasStaticCollections(declType))
                 {
                     continue;
                 }
@@ -1330,7 +1399,7 @@ namespace OmniThreadUltimate
             return true;
         }
 
-        // Parallel Bypass for MissileGirl.Optimizations.StatWorker_Patch.Replacemant (replaces GetValueUnfinalized)
+        // Lock-Free Cached Parallel Bypass for MissileGirl.Optimizations.StatWorker_Patch.Replacemant (replaces GetValueUnfinalized)
         public static bool BypassMissileGirlStatWorkerInParallel(
             StatWorker statWorker,
             StatRequest req,
@@ -1339,11 +1408,8 @@ namespace OmniThreadUltimate
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && statWorker != null)
             {
-                lock (ParallelTickEngine.GlobalSyncLock)
-                {
-                    __result = statWorker.GetValueUnfinalized(req, applyPostProcess);
-                    return false;
-                }
+                __result = ThreadLocalStatCache.GetOrAddUnfinalized(statWorker, req, applyPostProcess, 250);
+                return false;
             }
             return true;
         }
@@ -1384,7 +1450,18 @@ namespace OmniThreadUltimate
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
             {
-                __result = (thing == null) ? stat.defaultBaseValue : StatExtension.GetStatValue(thing, stat, applyPostProcess, 60);
+                if (thing == null)
+                {
+                    __result = stat != null ? stat.defaultBaseValue : 0f;
+                }
+                else if (stat != null && stat.Worker != null)
+                {
+                    __result = ThreadLocalStatCache.GetOrAdd(stat.Worker, thing, applyPostProcess, 250);
+                }
+                else
+                {
+                    __result = StatExtension.GetStatValue(thing, stat, applyPostProcess, 250);
+                }
                 return false;
             }
             return true;
