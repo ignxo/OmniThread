@@ -35,19 +35,97 @@ namespace OmniThreadUltimate
                 AutoBenchmarkRunner.InitializeFromCommandLine();
 
                 Harmony harmony = new Harmony("omnithread.ultimate.harmony");
-                harmony.PatchAll(Assembly.GetExecutingAssembly());
+                int patchedClasses = PatchAllResilient(harmony, Assembly.GetExecutingAssembly());
+                ApplyCrossVersionFallbacks(harmony);
                 ModCompatibilityManager.Initialize(harmony);
 
-                Log.Message(string.Format("[OmniThread Ultimate] Initialized successfully! MainThreadId={0}, LogicalCores={1}, IterationLevel={2}, Multithreading={3}, AutoTest={4}",
+                Log.Message(string.Format("[OmniThread Ultimate] Initialized successfully! RimWorld={0}, MainThreadId={1}, LogicalCores={2}, IterationLevel={3}, Multithreading={4}, PatchedClasses={5}, AutoTest={6}",
+                    VersionControl.CurrentVersionStringWithRev,
                     MainThreadSyncQueue.MainThreadId,
                     Environment.ProcessorCount,
                     IterationLevel,
                     EnableMultithreading,
+                    patchedClasses,
                     AutoBenchmarkRunner.IsAutoTestMode));
             }
             catch (Exception ex)
             {
                 Log.Error("[OmniThread Ultimate] Fatal initialization error: " + ex);
+            }
+        }
+
+        private static int PatchAllResilient(Harmony harmony, Assembly assembly)
+        {
+            int successCount = 0;
+            Type[] types;
+            try
+            {
+                types = AccessTools.GetTypesFromAssembly(assembly);
+            }
+            catch (ReflectionTypeLoadException rtle)
+            {
+                types = rtle.Types;
+            }
+
+            if (types == null)
+            {
+                return 0;
+            }
+
+            for (int i = 0; i < types.Length; i++)
+            {
+                Type type = types[i];
+                if (type == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    object[] attrs = type.GetCustomAttributes(typeof(HarmonyPatch), true);
+                    if (attrs != null && attrs.Length > 0)
+                    {
+                        harmony.CreateClassProcessor(type).Patch();
+                        successCount++;
+                    }
+                }
+                catch
+                {
+                    // Gracefully skip version-specific patch classes when running on older RimWorld versions (1.3 / 1.4 / 1.5)
+                }
+            }
+            return successCount;
+        }
+
+        private static void ApplyCrossVersionFallbacks(Harmony harmony)
+        {
+            try
+            {
+                // RimWorld 1.3 / 1.4 / 1.5 PathFinder.FindPath fallback (replaced by FindPathNow in 1.6)
+                Type pfType = typeof(Verse.AI.PathFinder);
+                MethodInfo enterLock = AccessTools.Method(typeof(ModCompatibilityManager), "EnterUnifiedModLock");
+                MethodInfo exitLock = AccessTools.Method(typeof(ModCompatibilityManager), "ExitUnifiedModLock");
+                if (pfType != null && enterLock != null && exitLock != null)
+                {
+                    MethodInfo[] pfMethods = pfType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                    for (int i = 0; i < pfMethods.Length; i++)
+                    {
+                        MethodInfo m = pfMethods[i];
+                        if (m != null && m.Name == "FindPath" && !m.IsAbstract)
+                        {
+                            try
+                            {
+                                harmony.Patch(m, new HarmonyMethod(enterLock), null, null, new HarmonyMethod(exitLock));
+                            }
+                            catch
+                            {
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
             }
         }
     }

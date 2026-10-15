@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
   <name>OmniThread Ultimate</name>
   <author>ignxo</author>
@@ -53,7 +53,7 @@
     <li>Krkr.rule56</li>
     <li>vr.missilegirl</li>
   </loadAfter>
-  <description>OmniThread Ultimate — Lock-Free Multi-Threaded Engine for RimWorld 1.5 / 1.6.
+  <description>OmniThread Ultimate â€” Lock-Free Multi-Threaded Engine for RimWorld 1.5 / 1.6.
 
 Features:
 - Dedicated 12+ Thread Persistent Worker Pool with Atomic Work-Stealing and Pawn/Thing Interleaving.
