@@ -608,9 +608,10 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(TickManager), "get_TickRateMultiplier")]
     public static class Patch_TickManager_TickRateMultiplier
     {
+        [HarmonyPriority(Priority.First)]
         public static bool Prefix(TickManager __instance, ref float __result)
         {
-            if (AutoBenchmarkRunner.IsAutoTestMode && __instance.CurTimeSpeed == TimeSpeed.Ultrafast)
+            if (AutoBenchmarkRunner.IsAutoTestMode && __instance != null && __instance.CurTimeSpeed == TimeSpeed.Ultrafast)
             {
                 __result = 150f;
                 return false;
@@ -621,17 +622,25 @@ namespace OmniThreadUltimate
                 TimeSpeed speed = __instance.CurTimeSpeed;
                 if (speed == TimeSpeed.Superfast || speed == TimeSpeed.Ultrafast)
                 {
-                    if (speed == TimeSpeed.Superfast && __instance.slower != null && __instance.slower.ForcedNormalSpeed && !AutoBenchmarkRunner.IsAutoTestMode)
-                    {
-                        return true;
-                    }
-
                     __result = 150f;
                     return false;
                 }
             }
 
             return true;
+        }
+
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(TickManager __instance, ref float __result)
+        {
+            if (OmniThreadMod.UncapMaxTimeSpeed && __instance != null)
+            {
+                TimeSpeed speed = __instance.CurTimeSpeed;
+                if (speed == TimeSpeed.Superfast || speed == TimeSpeed.Ultrafast)
+                {
+                    __result = 150f;
+                }
+            }
         }
     }
 

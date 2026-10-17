@@ -40,11 +40,12 @@ namespace OmniThreadUltimate
                 ApplyCrossVersionFallbacks(harmony);
                 ModCompatibilityManager.Initialize(harmony);
 
-                Log.Message(string.Format("[OmniThread Ultimate] Initialized successfully! MainThreadId={0}, LogicalCores={1}, IterationLevel={2}, Multithreading={3}, PatchedClasses={4}, AutoTest={5}",
+                Log.Message(string.Format("[OmniThread Ultimate] Initialized successfully! MainThreadId={0}, LogicalCores={1}, IterationLevel={2}, Multithreading={3}, UncapMaxSpeed={4}, PatchedClasses={5}, AutoTest={6}",
                     MainThreadSyncQueue.MainThreadId,
                     Environment.ProcessorCount,
                     IterationLevel,
                     EnableMultithreading,
+                    UncapMaxTimeSpeed,
                     patchedClasses,
                     AutoBenchmarkRunner.IsAutoTestMode));
             }

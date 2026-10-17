@@ -369,6 +369,8 @@ namespace OmniThreadUltimate
         private static Thing tsLastDeSpawnedThing;
         [ThreadStatic]
         private static int tsLastDeSpawnedStamp;
+        [ThreadStatic]
+        private static int tsLastDeSpawnedCount;
 
         public static bool Prefix(Thing __instance, DestroyMode mode)
         {
@@ -383,11 +385,18 @@ namespace OmniThreadUltimate
             int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
             if (tsLastDeSpawnedStamp == stamp && ReferenceEquals(tsLastDeSpawnedThing, __instance))
             {
-                tsLastDeSpawnedThing = null;
-                throw new InvalidOperationException("OmniThread loop guard: Thing.DeSpawn called repeatedly on same Thing in one tick.");
+                tsLastDeSpawnedCount++;
+                if (tsLastDeSpawnedCount > 8)
+                {
+                    tsLastDeSpawnedThing = null;
+                    tsLastDeSpawnedCount = 0;
+                    throw new InvalidOperationException("OmniThread loop guard: Thing.DeSpawn called repeatedly on same Thing in one tick.");
+                }
+                return false;
             }
             tsLastDeSpawnedStamp = stamp;
             tsLastDeSpawnedThing = __instance;
+            tsLastDeSpawnedCount = 1;
 
             Thing thingRef = __instance;
             DestroyMode modeRef = mode;
@@ -409,6 +418,8 @@ namespace OmniThreadUltimate
         private static Thing tsLastDestroyedThing;
         [ThreadStatic]
         private static int tsLastDestroyedStamp;
+        [ThreadStatic]
+        private static int tsLastDestroyedCount;
 
         public static bool Prefix(Thing __instance, DestroyMode mode)
         {
@@ -433,11 +444,18 @@ namespace OmniThreadUltimate
             int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
             if (tsLastDestroyedStamp == stamp && ReferenceEquals(tsLastDestroyedThing, __instance))
             {
-                tsLastDestroyedThing = null;
-                throw new InvalidOperationException("OmniThread loop guard: Thing.Destroy called repeatedly on same Thing in one tick.");
+                tsLastDestroyedCount++;
+                if (tsLastDestroyedCount > 8)
+                {
+                    tsLastDestroyedThing = null;
+                    tsLastDestroyedCount = 0;
+                    throw new InvalidOperationException("OmniThread loop guard: Thing.Destroy called repeatedly on same Thing in one tick.");
+                }
+                return false;
             }
             tsLastDestroyedStamp = stamp;
             tsLastDestroyedThing = __instance;
+            tsLastDestroyedCount = 1;
 
             Thing thingRef = __instance;
             DestroyMode modeRef = mode;
@@ -459,6 +477,8 @@ namespace OmniThreadUltimate
         private static Thing tsLastSpawnedThing;
         [ThreadStatic]
         private static int tsLastSpawnedStamp;
+        [ThreadStatic]
+        private static int tsLastSpawnedCount;
 
         public static bool Prefix(Thing newThing, IntVec3 loc, Map map, Rot4 rot, WipeMode wipeMode, bool respawningAfterLoad, bool forbidLeavings, ref Thing __result)
         {
@@ -484,11 +504,19 @@ namespace OmniThreadUltimate
             int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
             if (tsLastSpawnedStamp == stamp && ReferenceEquals(tsLastSpawnedThing, newThing))
             {
-                tsLastSpawnedThing = null;
-                throw new InvalidOperationException("OmniThread loop guard: GenSpawn.Spawn called repeatedly on same Thing in one tick.");
+                tsLastSpawnedCount++;
+                if (tsLastSpawnedCount > 8)
+                {
+                    tsLastSpawnedThing = null;
+                    tsLastSpawnedCount = 0;
+                    throw new InvalidOperationException("OmniThread loop guard: GenSpawn.Spawn called repeatedly on same Thing in one tick.");
+                }
+                __result = newThing;
+                return false;
             }
             tsLastSpawnedStamp = stamp;
             tsLastSpawnedThing = newThing;
+            tsLastSpawnedCount = 1;
 
             if (!newThing.Spawned)
             {
