@@ -39,6 +39,8 @@ namespace OmniThreadUltimate
         public static bool HasVEF = false;
 
         private static Harmony StoredHarmony;
+        private static bool LateGameplayPatchesApplied = false;
+        private static bool ThirdPartyAssembliesScanned = false;
         private static readonly HashSet<MethodBase> PatchedMethods = new HashSet<MethodBase>();
         private static readonly HashSet<MethodBase> SkipPatchedMethods = new HashSet<MethodBase>();
 
@@ -57,6 +59,8 @@ namespace OmniThreadUltimate
             try
             {
                 StoredHarmony = harmony;
+                LateGameplayPatchesApplied = false;
+                ThirdPartyAssembliesScanned = false;
                 TypeMainThreadDecisionCache.Clear();
                 BaseMainThreadTypes.Clear();
                 ActiveModNames.Clear();
@@ -110,6 +114,31 @@ namespace OmniThreadUltimate
             catch (Exception ex)
             {
                 Log.Warning("[OmniThread Ultimate] ModCompatibilityManager.Initialize warning: " + ex);
+            }
+        }
+
+        public static void EnsureLateCompatibilityPatchesApplied()
+        {
+            if (LateGameplayPatchesApplied || StoredHarmony == null)
+            {
+                return;
+            }
+            LateGameplayPatchesApplied = true;
+            try
+            {
+                int beforeCount = AppliedModCompatPatchesCount;
+                ApplyCompatibilityPatches(StoredHarmony);
+                int added = AppliedModCompatPatchesCount - beforeCount;
+                if (added > 0)
+                {
+                    Log.Message(string.Format(
+                        "[OmniThread Ultimate] Late post-startup mod compatibility scan protected {0} additional third-party mod methods (Total={1}).",
+                        added, AppliedModCompatPatchesCount));
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("[OmniThread Ultimate] EnsureLateCompatibilityPatchesApplied warning: " + ex.Message);
             }
         }
 
@@ -1025,6 +1054,7 @@ namespace OmniThreadUltimate
                 PatchAllOverloadsWithUnifiedLock(harmony, zoologyHerdHuntType, "Postfix", "ZoologyMod: HerdPredatorHuntPatch.Postfix");
                 PatchAllOverloadsWithUnifiedLock(harmony, zoologyHerdHuntType, "HasPackSupport", "ZoologyMod: HerdPredatorHuntPatch.HasPackSupport");
                 PatchAllOverloadsWithUnifiedLock(harmony, zoologyHerdHuntType, "GetHerdCandidates", "ZoologyMod: HerdPredatorHuntPatch.GetHerdCandidates");
+                ProtectZoologyModAssembly(harmony, zoologyHerdHuntType.Assembly);
             }
 
             Type zoologyProtectPreyType = FindModType("ZoologyMod.ProtectPreyMapCache");
@@ -1053,6 +1083,12 @@ namespace OmniThreadUltimate
 
             string[] zoologyStaticJobGivers = new string[]
             {
+                "ZoologyMod.JobGiver_AnimalFlee_Zoology",
+                "ZoologyMod.JobGiver_AnimalLickWounds",
+                "ZoologyMod.JobGiver_MotherRespondToSuckleRequests",
+                "ZoologyMod.JobGiver_YoungSuckleFromMother",
+                "ZoologyMod.JobGiver_WanderNearPrey",
+                "ZoologyMod.JobGiver_WildCompatibleMate",
                 "ZoologyMod.JobGiver_IncubateEggClutch",
                 "ZoologyMod.JobGiver_WanderNearEggClutch",
                 "ZoologyMod.JobGiver_WanderNearMother",
@@ -1069,8 +1105,17 @@ namespace OmniThreadUltimate
 
             PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_ScavengeringAI+Inner_FoodUtility_BestFoodSourceOnMap", new string[] { "Postfix", "TryConsumeMapScanBudget" });
             PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_ScavengeringCore", new string[] { "TryGetScavengerCorpseState", "EnsureScavengerCorpseStateCacheFresh", "TryConsumeAdjacentFallbackBudget", "EnsureRuntimeState" });
-            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_AnimalFleeFromPredators", new string[] { "Postfix" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_AnimalFleeFromPredators", new string[]
+            {
+                "Postfix", "ApplyZoologyFleeLogic", "TryBuildImmediateDangerFleeJob",
+                "TryBuildPredatorLoiterFleeJob", "TryBuildHostileThreatFleeJob", "GetCloseMeleeThreatTarget"
+            });
             PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_AnimalFleeFromPredators+ThreatMapCache", new string[] { "TryGetFresh", "TryGetLastKnown", "GetOrRefresh", "AddThreat", "MarkCloseMeleeThreat", "CleanupStaleMaps", "ReturnBucketLists" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_ReactToCloseMeleeThreat_Fallback", new string[] { "Prefix", "Postfix" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_AnimalClotting", new string[] { "CompTick", "CompTickInterval", "CompTickRare" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_AnimalRegeneration", new string[] { "CompTick", "CompTickInterval", "CompTickRare" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_Ageless", new string[] { "CompTick", "CompTickInterval", "CompTickRare" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_DrugsImmune", new string[] { "CompTick", "CompTickInterval", "CompTickRare" });
 
             // 7. Vanilla Social Interactions Expanded (VSIE)
             PatchTypeMethodsWithUnifiedLock(harmony, "VanillaSocialInteractionsExpanded.JobGiver_ViewingArtTogether", new string[] { "TryGiveJob" });
@@ -1124,6 +1169,57 @@ namespace OmniThreadUltimate
             ScanAndProtectThirdPartyModHooks(harmony);
         }
 
+        private static bool ZoologyAssemblyProtected = false;
+
+        private static void ProtectZoologyModAssembly(Harmony harmony, Assembly zoologyAsm)
+        {
+            if (ZoologyAssemblyProtected || zoologyAsm == null || harmony == null)
+            {
+                return;
+            }
+            ZoologyAssemblyProtected = true;
+
+            try
+            {
+                Type[] types = zoologyAsm.GetTypes();
+                for (int i = 0; i < types.Length; i++)
+                {
+                    Type t = types[i];
+                    if (t == null || t.IsAbstract || t.IsInterface || t.IsGenericTypeDefinition)
+                    {
+                        continue;
+                    }
+
+                    if (typeof(ThinkNode).IsAssignableFrom(t))
+                    {
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "TryGiveJob", "ZoologyMod: " + t.Name + ".TryGiveJob");
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "TryIssueJobPackage", "ZoologyMod: " + t.Name + ".TryIssueJobPackage");
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "Satisfied", "ZoologyMod: " + t.Name + ".Satisfied");
+                    }
+                    else if (typeof(JobDriver).IsAssignableFrom(t))
+                    {
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "TryMakePreToilReservations", "ZoologyMod: " + t.Name + ".TryMakePreToilReservations");
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "MakeNewToils", "ZoologyMod: " + t.Name + ".MakeNewToils");
+                    }
+                    else if (typeof(ThingComp).IsAssignableFrom(t))
+                    {
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "CompTick", "ZoologyMod: " + t.Name + ".CompTick");
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "CompTickInterval", "ZoologyMod: " + t.Name + ".CompTickInterval");
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "CompTickRare", "ZoologyMod: " + t.Name + ".CompTickRare");
+                        PatchAllOverloadsWithUnifiedLock(harmony, t, "PostPostApplyDamage", "ZoologyMod: " + t.Name + ".PostPostApplyDamage");
+                    }
+
+                    // Protect all Harmony Prefix/Postfix methods in ZoologyMod
+                    PatchAllOverloadsWithUnifiedLock(harmony, t, "Prefix", "ZoologyMod: " + t.Name + ".Prefix");
+                    PatchAllOverloadsWithUnifiedLock(harmony, t, "Postfix", "ZoologyMod: " + t.Name + ".Postfix");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("[OmniThread Ultimate] ProtectZoologyModAssembly warning: " + ex.Message);
+            }
+        }
+
         private static void ScanAndProtectThirdPartyModHooks(Harmony harmony)
         {
             if (harmony == null)
@@ -1133,24 +1229,37 @@ namespace OmniThreadUltimate
 
             try
             {
-                MethodBase[] coreTickMethods = new MethodBase[]
+                // Note: Do NOT include Pawn.Tick or Pawn_PathFollower.PatherTick here!
+                // VEF.dll hooks PatherTick on every pawn every tick; locking PatherTick serializes all 12 worker threads!
+                // Instead, protect low-frequency / interval / AI / combat / health / need / interaction hooks:
+                MethodBase[] coreProtectedMethods = new MethodBase[]
                 {
-                    AccessTools.Method(typeof(Pawn), "Tick"),
-                    AccessTools.Method(typeof(Pawn_PathFollower), "PatherTick"),
                     AccessTools.Method(typeof(Pawn_HealthTracker), "HealthTick"),
+                    AccessTools.Method(typeof(Pawn_HealthTracker), "HealthTickInterval"),
                     AccessTools.Method(typeof(Pawn_NeedsTracker), "NeedsTrackerTick"),
-                    AccessTools.Method(typeof(Pawn_JobTracker), "JobTrackerTick"),
+                    AccessTools.Method(typeof(Pawn_NeedsTracker), "NeedsTrackerTickInterval"),
                     AccessTools.Method(typeof(Pawn_MindState), "MindStateTick"),
+                    AccessTools.Method(typeof(Pawn_MindState), "MindStateTickInterval"),
                     AccessTools.Method(typeof(Pawn_InteractionsTracker), "InteractionsTrackerTick"),
+                    AccessTools.Method(typeof(Pawn_InteractionsTracker), "InteractionsTrackerTickInterval"),
+                    AccessTools.Method(typeof(Pawn_InteractionsTracker), "TryInteractWith"),
+                    AccessTools.Method(typeof(Pawn_JobTracker), "DetermineNextJob"),
+                    AccessTools.Method(typeof(Pawn_JobTracker), "StartJob"),
+                    AccessTools.Method(typeof(Pawn_JobTracker), "EndCurrentJob"),
+                    AccessTools.Method(typeof(Pawn_JobTracker), "TryTakeOrderedJob"),
+                    AccessTools.Method(typeof(ThinkNode_JobGiver), "TryGiveJob"),
                     AccessTools.Method(typeof(Verb), "TryStartCastOn", new Type[] { typeof(LocalTargetInfo), typeof(LocalTargetInfo), typeof(bool), typeof(bool), typeof(bool), typeof(bool) }),
                     AccessTools.Method(typeof(Verb), "TryCastNextBurstShot"),
                     AccessTools.Method(typeof(FoodUtility), "BestFoodSourceOnMap"),
-                    AccessTools.Method(typeof(AttackTargetsCache), "GetPotentialTargetsFor")
+                    AccessTools.Method(typeof(FoodUtility), "TryFindBestFoodSourceFor"),
+                    AccessTools.Method(typeof(AttackTargetsCache), "GetPotentialTargetsFor"),
+                    AccessTools.Method(typeof(AttackTargetFinder), "BestAttackTarget"),
+                    AccessTools.Method(typeof(AttackTargetFinder), "BestShootTargetFromCurrentPosition")
                 };
 
-                for (int i = 0; i < coreTickMethods.Length; i++)
+                for (int i = 0; i < coreProtectedMethods.Length; i++)
                 {
-                    MethodBase coreMethod = coreTickMethods[i];
+                    MethodBase coreMethod = coreProtectedMethods[i];
                     if (coreMethod == null)
                     {
                         continue;
@@ -1165,10 +1274,101 @@ namespace OmniThreadUltimate
                     ProtectHarmonyPatchList(harmony, patchInfo.Prefixes);
                     ProtectHarmonyPatchList(harmony, patchInfo.Postfixes);
                 }
+
+                if (!ThirdPartyAssembliesScanned)
+                {
+                    ThirdPartyAssembliesScanned = true;
+                    ScanThirdPartyModSubclasses(harmony);
+                }
             }
             catch (Exception ex)
             {
                 Log.Warning("[OmniThread Ultimate] ScanAndProtectThirdPartyModHooks warning: " + ex.Message);
+            }
+        }
+
+        private static void ScanThirdPartyModSubclasses(Harmony harmony)
+        {
+            List<ModContentPack> runningMods = LoadedModManager.RunningModsListForReading;
+            if (runningMods == null)
+            {
+                return;
+            }
+
+            HashSet<Assembly> visitedAssemblies = new HashSet<Assembly>();
+            for (int i = 0; i < runningMods.Count; i++)
+            {
+                ModContentPack mod = runningMods[i];
+                if (mod == null || mod.assemblies == null || mod.assemblies.loadedAssemblies == null)
+                {
+                    continue;
+                }
+
+                List<Assembly> asms = mod.assemblies.loadedAssemblies;
+                for (int j = 0; j < asms.Count; j++)
+                {
+                    Assembly asm = asms[j];
+                    if (asm == null || !visitedAssemblies.Add(asm))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (asm.ReflectionOnly)
+                        {
+                            continue;
+                        }
+                        string asmName = asm.GetName().Name;
+                        if (asmName == "OmniThreadUltimate" || asmName == "Assembly-CSharp" || asmName == "0Harmony" || asmName == "mscorlib" || asmName == "System")
+                        {
+                            continue;
+                        }
+
+                        Type[] types;
+                        try
+                        {
+                            types = asm.GetTypes();
+                        }
+                        catch (ReflectionTypeLoadException rtle)
+                        {
+                            types = rtle.Types;
+                        }
+                        if (types == null)
+                        {
+                            continue;
+                        }
+
+                        for (int k = 0; k < types.Length; k++)
+                        {
+                            Type t = types[k];
+                            if (t == null || t.IsAbstract || t.IsInterface || t.IsGenericTypeDefinition)
+                            {
+                                continue;
+                            }
+
+                            if (typeof(ThinkNode).IsAssignableFrom(t))
+                            {
+                                PatchAllOverloadsWithUnifiedLock(harmony, t, "TryGiveJob", "AutoThinkNode: " + t.Name + ".TryGiveJob");
+                                PatchAllOverloadsWithUnifiedLock(harmony, t, "TryIssueJobPackage", "AutoThinkNode: " + t.Name + ".TryIssueJobPackage");
+                                PatchAllOverloadsWithUnifiedLock(harmony, t, "Satisfied", "AutoThinkNode: " + t.Name + ".Satisfied");
+                            }
+                            else if (typeof(InteractionWorker).IsAssignableFrom(t))
+                            {
+                                PatchAllOverloadsWithUnifiedLock(harmony, t, "RandomSelectionWeight", "AutoInteraction: " + t.Name + ".RandomSelectionWeight");
+                                PatchAllOverloadsWithUnifiedLock(harmony, t, "Interacted", "AutoInteraction: " + t.Name + ".Interacted");
+                            }
+                            else if (typeof(ThingComp).IsAssignableFrom(t) && t.FullName != "CombatAI.Comps.ThingComp_CombatAI")
+                            {
+                                PatchAllOverloadsWithUnifiedLock(harmony, t, "CompTickRare", "AutoCompRare: " + t.Name + ".CompTickRare");
+                                PatchAllOverloadsWithUnifiedLock(harmony, t, "CompTickLong", "AutoCompLong: " + t.Name + ".CompTickLong");
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
             }
         }
 
