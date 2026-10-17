@@ -119,6 +119,7 @@ namespace OmniThreadUltimate
 
         public static void EnsureLateCompatibilityPatchesApplied()
         {
+            PreWarmDefTexturesOnMainThread();
             if (LateGameplayPatchesApplied || StoredHarmony == null)
             {
                 return;
@@ -480,9 +481,63 @@ namespace OmniThreadUltimate
         }
 
         private static int LastPreWarmTailTick = -1;
+        private static bool DefTexturesPreWarmed = false;
+
+        public static void PreWarmDefTexturesOnMainThread()
+        {
+            if (DefTexturesPreWarmed)
+            {
+                return;
+            }
+            DefTexturesPreWarmed = true;
+            try
+            {
+                List<AbilityDef> abilities = DefDatabase<AbilityDef>.AllDefsListForReading;
+                if (abilities != null)
+                {
+                    for (int i = 0; i < abilities.Count; i++)
+                    {
+                        AbilityDef def = abilities[i];
+                        if (def != null)
+                        {
+                            try { object tex = def.WarmupMoteSocialSymbol; } catch { }
+                        }
+                    }
+                }
+                List<InteractionDef> interactions = DefDatabase<InteractionDef>.AllDefsListForReading;
+                if (interactions != null)
+                {
+                    for (int i = 0; i < interactions.Count; i++)
+                    {
+                        InteractionDef def = interactions[i];
+                        if (def != null)
+                        {
+                            try { object tex = def.GetSymbol(null, null); } catch { }
+                        }
+                    }
+                }
+                List<PreceptDef> precepts = DefDatabase<PreceptDef>.AllDefsListForReading;
+                if (precepts != null)
+                {
+                    for (int i = 0; i < precepts.Count; i++)
+                    {
+                        PreceptDef def = precepts[i];
+                        if (def != null)
+                        {
+                            try { object tex = def.Icon; } catch { }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
 
         public static void PreWarmBeforeParallelTick(List<Thing> currentBucket)
         {
+            PreWarmDefTexturesOnMainThread();
+
             if (!HasCombatAI)
             {
                 return;
@@ -551,56 +606,25 @@ namespace OmniThreadUltimate
                             }
                             else if (scanTailThisTick)
                             {
-                                if (map.mapPawns != null && map.mapPawns.AllPawnsSpawned != null)
-                                {
-                                    IReadOnlyList<Pawn> spawnedPawns = map.mapPawns.AllPawnsSpawned;
-                                    int pCount = spawnedPawns.Count;
-                                    for (int pIdx = 0; pIdx < pCount; pIdx++)
-                                    {
-                                        Pawn p = spawnedPawns[pIdx];
-                                        if (p != null)
-                                        {
-                                            PreWarmSingleThingWithComps(p);
-                                            if (p.equipment != null && p.equipment.AllEquipmentListForReading != null)
-                                            {
-                                                List<ThingWithComps> eqList = p.equipment.AllEquipmentListForReading;
-                                                for (int e = 0; e < eqList.Count; e++)
-                                                {
-                                                    PreWarmSingleThingWithComps(eqList[e]);
-                                                }
-                                            }
-                                            if (p.apparel != null && p.apparel.WornApparel != null)
-                                            {
-                                                List<Apparel> appList = p.apparel.WornApparel;
-                                                for (int a = 0; a < appList.Count; a++)
-                                                {
-                                                    PreWarmSingleThingWithComps(appList[a]);
-                                                }
-                                            }
-                                            if (p.carryTracker != null && p.carryTracker.CarriedThing != null)
-                                            {
-                                                PreWarmSingleThingWithComps(p.carryTracker.CarriedThing as ThingWithComps);
-                                            }
-                                        }
-                                    }
-                                }
-
                                 int lastCount;
                                 if (!LastPreWarmedMapThingCounts.TryGetValue(map.uniqueID, out lastCount))
                                 {
                                     lastCount = 0;
                                 }
-                                int startIdx = Math.Max(0, Math.Min(lastCount - 16, allCount - 128));
-                                PreWarmThingList(allThings, startIdx, true);
-                                LastPreWarmedMapThingCounts[map.uniqueID] = allCount;
+                                if (allCount != lastCount)
+                                {
+                                    int startIdx = Math.Max(0, Math.Min(lastCount - 8, allCount - 64));
+                                    PreWarmThingList(allThings, startIdx, true);
+                                    LastPreWarmedMapThingCounts[map.uniqueID] = allCount;
+                                }
                             }
                         }
                     }
                 }
 
-                if (currentBucket != null)
+                if (currentBucket != null && (ticksGame & 255) == 0)
                 {
-                    PreWarmThingList(currentBucket, 0, true);
+                    PreWarmThingList(currentBucket, 0, false);
                 }
             }
             catch
@@ -884,11 +908,7 @@ namespace OmniThreadUltimate
                 PatchAllOverloadsWithUnifiedLock(harmony, caiVerbBurstShotType, "OnShot", "CombatAI: Verb_TryCastNextBurstShot_Patch.OnShot");
             }
 
-            Type caiDoorTickType = FindModType("CombatAI.Patches.Building_Door_Patch+Building_Door_Tick_Patch");
-            if (caiDoorTickType != null)
-            {
-                PatchAllOverloadsWithUnifiedLock(harmony, caiDoorTickType, "Postfix", "CombatAI: Building_Door_Tick_Patch.Postfix");
-            }
+            PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.WallGrid", new string[] { "RecalculateCell" });
 
             Type caiDoorClearCacheType = FindModType("CombatAI.Patches.Building_Door_Patch+Building_Door_ClearReachabilityCache_Patch");
             if (caiDoorClearCacheType != null)
@@ -1030,7 +1050,7 @@ namespace OmniThreadUltimate
             PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.Patches.JobGiver_AITrashBuildingsDistant_Patch+JobGiver_AITrashBuildingsDistant_TryGiveJob_Patch", new string[] { "Postfix" });
             PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.Patches.LordToil_AssaultColony_Patch", new string[] { "GetZoneTotalMarketValue" });
             PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.Patches.LordToil_AssaultColony_Patch+LordToil_AssaultColony_UpdateAllDuties_Patch", new string[] { "Postfix" });
-            PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.Patches.CompProjectileInterceptor_Patch+CompProjectileInterceptor_CompTick_Patch", new string[] { "Postfix" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.InterceptorTracker", new string[] { "TryRegister" });
             PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.Patches.Pawn_ApparelTracker_Patch+Pawn_ApparelTracker_Notify_ApparelAdded_Patch", new string[] { "Postfix" });
             PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.Patches.Pawn_ApparelTracker_Patch+Pawn_ApparelTracker_Notify_ApparelRemoved_Patch", new string[] { "Postfix" });
             PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.Patches.Pawn_EquipmentTracker_Patch+Pawn_EquipmentTracker_Notify_EquipmentAdded_Patch", new string[] { "Postfix" });
@@ -1042,7 +1062,7 @@ namespace OmniThreadUltimate
             PatchTypeMethodsWithUnifiedLock(harmony, "RunAndGun.Harmony.JobDriver_SetupToils", new string[] { "checkForAutoAttack" });
             PatchTypeMethodsWithUnifiedLock(harmony, "RunAndGun.Harmony.Verb_TryCastNextBurstShot", new string[] { "SetStanceRunAndGun" });
             PatchTypeMethodsWithUnifiedLock(harmony, "RunAndGun.Harmony.Verb_TryStartCastOn", new string[] { "Prefix" });
-            PatchTypeMethodsWithLeafLock(harmony, "RunAndGun.Harmony.Pawn_TicksPerMove", new string[] { "Postfix", "hasLightWeapon" });
+            PatchTypeMethodsWithLeafLock(harmony, "RunAndGun.Harmony.Pawn_TicksPerMove", new string[] { "hasLightWeapon" });
             PatchTypeMethodsWithUnifiedLock(harmony, "RunAndGun.CompRunAndGun", new string[] { "CompTickRare", "Initialize" });
             PatchTypeMethodsWithUnifiedLock(harmony, "RunAndGun.Harmony.MentalStateHandler_TryStartMentalState", new string[] { "Postfix" });
 
@@ -1068,17 +1088,13 @@ namespace OmniThreadUltimate
             if (zoologySmallPetType != null)
             {
                 HasZoologyMod = true;
-                PatchAllOverloadsWithUnifiedLock(harmony, zoologySmallPetType, "Postfix", "ZoologyMod: Patch_SmallPetThreatDisabled.Postfix");
-                Type[] nestedTypes = zoologySmallPetType.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic);
-                if (nestedTypes != null)
-                {
-                    for (int i = 0; i < nestedTypes.Length; i++)
-                    {
-                        Type nt = nestedTypes[i];
-                        PatchAllOverloadsWithUnifiedLock(harmony, nt, "Postfix", "ZoologyMod: " + nt.Name + ".Postfix");
-                        PatchAllOverloadsWithUnifiedLock(harmony, nt, "Prefix", "ZoologyMod: " + nt.Name + ".Prefix");
-                    }
-                }
+                PatchAllOverloadsWithUnifiedLock(harmony, zoologySmallPetType, "EnsureSmallPetCandidateSetCached", "ZoologyMod: Patch_SmallPetThreatDisabled.EnsureSmallPetCandidateSetCached");
+                PatchAllOverloadsWithUnifiedLock(harmony, zoologySmallPetType, "ShouldDisableThreatForSmallPet", "ZoologyMod: Patch_SmallPetThreatDisabled.ShouldDisableThreatForSmallPet");
+                PatchAllOverloadsWithUnifiedLock(harmony, zoologySmallPetType, "IsHostileToPlayerFactionSafe", "ZoologyMod: Patch_SmallPetThreatDisabled.IsHostileToPlayerFactionSafe");
+                PatchAllOverloadsWithUnifiedLock(harmony, zoologySmallPetType, "UpdateCachedMembership", "ZoologyMod: Patch_SmallPetThreatDisabled.UpdateCachedMembership");
+                PatchAllOverloadsWithUnifiedLock(harmony, zoologySmallPetType, "RemoveCachedMembership", "ZoologyMod: Patch_SmallPetThreatDisabled.RemoveCachedMembership");
+                PatchAllOverloadsWithUnifiedLock(harmony, zoologySmallPetType, "InvalidateHostilityCache", "ZoologyMod: Patch_SmallPetThreatDisabled.InvalidateHostilityCache");
+                PatchAllOverloadsWithUnifiedLock(harmony, zoologySmallPetType, "RebuildSmallPetCandidateSet", "ZoologyMod: Patch_SmallPetThreatDisabled.RebuildSmallPetCandidateSet");
             }
 
             string[] zoologyStaticJobGivers = new string[]
@@ -1107,15 +1123,15 @@ namespace OmniThreadUltimate
             PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_ScavengeringCore", new string[] { "TryGetScavengerCorpseState", "EnsureScavengerCorpseStateCacheFresh", "TryConsumeAdjacentFallbackBudget", "EnsureRuntimeState" });
             PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_AnimalFleeFromPredators", new string[]
             {
-                "Postfix", "ApplyZoologyFleeLogic", "TryBuildImmediateDangerFleeJob",
+                "ApplyZoologyFleeLogic", "TryBuildImmediateDangerFleeJob",
                 "TryBuildPredatorLoiterFleeJob", "TryBuildHostileThreatFleeJob", "GetCloseMeleeThreatTarget"
             });
             PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_AnimalFleeFromPredators+ThreatMapCache", new string[] { "TryGetFresh", "TryGetLastKnown", "GetOrRefresh", "AddThreat", "MarkCloseMeleeThreat", "CleanupStaleMaps", "ReturnBucketLists" });
             PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Patch_ReactToCloseMeleeThreat_Fallback", new string[] { "Prefix", "Postfix" });
-            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_AnimalClotting", new string[] { "CompTick", "CompTickInterval", "CompTickRare" });
-            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_AnimalRegeneration", new string[] { "CompTick", "CompTickInterval", "CompTickRare" });
-            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_Ageless", new string[] { "CompTick", "CompTickInterval", "CompTickRare" });
-            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_DrugsImmune", new string[] { "CompTick", "CompTickInterval", "CompTickRare" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_AnimalClotting", new string[] { "CompTickRare" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_AnimalRegeneration", new string[] { "CompTickRare" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_Ageless", new string[] { "CompTickRare" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "ZoologyMod.Comp_DrugsImmune", new string[] { "CompTickRare" });
 
             // 7. Vanilla Social Interactions Expanded (VSIE)
             PatchTypeMethodsWithUnifiedLock(harmony, "VanillaSocialInteractionsExpanded.JobGiver_ViewingArtTogether", new string[] { "TryGiveJob" });
@@ -1145,7 +1161,7 @@ namespace OmniThreadUltimate
             PatchTypeMethodsWithUnifiedLock(harmony, "VEF.Pawns.PhasingPatches", new string[] { "CheckPhasing" });
             PatchTypeMethodsWithUnifiedLock(harmony, "VEF.Pawns.VanillaExpandedFramework_PregnancyUtility_PregnancyChanceForPartners_Patch", new string[] { "Postfix" });
             PatchTypeMethodsWithLeafLock(harmony, "VEF.Things.VanillaExpandedFramework_ThingStuffPair_Commonality_Patch", new string[] { "GetCachedExtension" });
-            PatchTypeMethodsWithLeafLock(harmony, "VEF.Weathers.VanillaExpandedFramework_WeatherManager_CurWeatherPerceived_Patch", new string[] { "Postfix" });
+            PatchMethodSkipInParallel(harmony, FindModType("VEF.Weathers.VanillaExpandedFramework_WeatherManager_CurWeatherPerceived_Patch"), "Postfix", "VEF: CurWeatherPerceived_Patch.Postfix (Skip Weather Letter Check in Parallel)");
 
             // 10. Events+ (Leo.Events) & Prisoner Realism
             PatchTypeMethodsWithUnifiedLock(harmony, "Leo.Events.Patch_InvisibilityUtility_IsHiddenFromPlayer", new string[] { "Prefix" });
@@ -1158,7 +1174,7 @@ namespace OmniThreadUltimate
             PatchTypeMethodsWithUnifiedLock(harmony, "PrisonerRealism.SurrenderUtility", new string[] { "TrySurrender", "DoSurrender" });
 
             // 11. Popular Community Mods (Performance Optimizer, Hospitality, Dubs Bad Hygiene, Giddy-Up, Simple Sidearms, Pick Up And Haul, CommonSense)
-            PatchTypeMethodsWithUnifiedLock(harmony, "PerformanceOptimizer.Optimization_FasterGetCompReplacement", new string[] { "Prefix" });
+            PatchMethodSkipInParallel(harmony, FindModType("PerformanceOptimizer.Optimization_FasterGetCompReplacement"), "Prefix", "PerformanceOptimizer: Optimization_FasterGetCompReplacement.Prefix (Skip in Parallel)");
             PatchTypeMethodsWithUnifiedLock(harmony, "Hospitality.MainTabWindow_Hospitality", new string[] { "Notify_PawnLeft" });
             PatchTypeMethodsWithUnifiedLock(harmony, "DubsBadHygiene.CompPipe", new string[] { "CompTick" });
             PatchTypeMethodsWithUnifiedLock(harmony, "PeteTimesSix.SimpleSidearms.Utilities.StatCalculator", new string[] { "canUseSidearmInstance" });
@@ -1193,8 +1209,6 @@ namespace OmniThreadUltimate
                     if (typeof(ThinkNode).IsAssignableFrom(t))
                     {
                         PatchAllOverloadsWithUnifiedLock(harmony, t, "TryGiveJob", "ZoologyMod: " + t.Name + ".TryGiveJob");
-                        PatchAllOverloadsWithUnifiedLock(harmony, t, "TryIssueJobPackage", "ZoologyMod: " + t.Name + ".TryIssueJobPackage");
-                        PatchAllOverloadsWithUnifiedLock(harmony, t, "Satisfied", "ZoologyMod: " + t.Name + ".Satisfied");
                     }
                     else if (typeof(JobDriver).IsAssignableFrom(t))
                     {
@@ -1203,15 +1217,9 @@ namespace OmniThreadUltimate
                     }
                     else if (typeof(ThingComp).IsAssignableFrom(t))
                     {
-                        PatchAllOverloadsWithUnifiedLock(harmony, t, "CompTick", "ZoologyMod: " + t.Name + ".CompTick");
-                        PatchAllOverloadsWithUnifiedLock(harmony, t, "CompTickInterval", "ZoologyMod: " + t.Name + ".CompTickInterval");
                         PatchAllOverloadsWithUnifiedLock(harmony, t, "CompTickRare", "ZoologyMod: " + t.Name + ".CompTickRare");
                         PatchAllOverloadsWithUnifiedLock(harmony, t, "PostPostApplyDamage", "ZoologyMod: " + t.Name + ".PostPostApplyDamage");
                     }
-
-                    // Protect all Harmony Prefix/Postfix methods in ZoologyMod
-                    PatchAllOverloadsWithUnifiedLock(harmony, t, "Prefix", "ZoologyMod: " + t.Name + ".Prefix");
-                    PatchAllOverloadsWithUnifiedLock(harmony, t, "Postfix", "ZoologyMod: " + t.Name + ".Postfix");
                 }
             }
             catch (Exception ex)
@@ -1229,19 +1237,11 @@ namespace OmniThreadUltimate
 
             try
             {
-                // Note: Do NOT include Pawn.Tick or Pawn_PathFollower.PatherTick here!
-                // VEF.dll hooks PatherTick on every pawn every tick; locking PatherTick serializes all 12 worker threads!
-                // Instead, protect low-frequency / interval / AI / combat / health / need / interaction hooks:
+                // Note: Do NOT include every-tick tracker methods (Pawn.Tick, PatherTick, HealthTick, NeedsTrackerTick, MindStateTick, InteractionsTrackerTick) here!
+                // Locking every-tick methods serializes all worker threads!
+                // Instead, protect low-frequency AI / job-transition / combat / interaction hooks:
                 MethodBase[] coreProtectedMethods = new MethodBase[]
                 {
-                    AccessTools.Method(typeof(Pawn_HealthTracker), "HealthTick"),
-                    AccessTools.Method(typeof(Pawn_HealthTracker), "HealthTickInterval"),
-                    AccessTools.Method(typeof(Pawn_NeedsTracker), "NeedsTrackerTick"),
-                    AccessTools.Method(typeof(Pawn_NeedsTracker), "NeedsTrackerTickInterval"),
-                    AccessTools.Method(typeof(Pawn_MindState), "MindStateTick"),
-                    AccessTools.Method(typeof(Pawn_MindState), "MindStateTickInterval"),
-                    AccessTools.Method(typeof(Pawn_InteractionsTracker), "InteractionsTrackerTick"),
-                    AccessTools.Method(typeof(Pawn_InteractionsTracker), "InteractionsTrackerTickInterval"),
                     AccessTools.Method(typeof(Pawn_InteractionsTracker), "TryInteractWith"),
                     AccessTools.Method(typeof(Pawn_JobTracker), "DetermineNextJob"),
                     AccessTools.Method(typeof(Pawn_JobTracker), "StartJob"),
@@ -1252,7 +1252,6 @@ namespace OmniThreadUltimate
                     AccessTools.Method(typeof(Verb), "TryCastNextBurstShot"),
                     AccessTools.Method(typeof(FoodUtility), "BestFoodSourceOnMap"),
                     AccessTools.Method(typeof(FoodUtility), "TryFindBestFoodSourceFor"),
-                    AccessTools.Method(typeof(AttackTargetsCache), "GetPotentialTargetsFor"),
                     AccessTools.Method(typeof(AttackTargetFinder), "BestAttackTarget"),
                     AccessTools.Method(typeof(AttackTargetFinder), "BestShootTargetFromCurrentPosition")
                 };
@@ -1350,8 +1349,6 @@ namespace OmniThreadUltimate
                             if (typeof(ThinkNode).IsAssignableFrom(t))
                             {
                                 PatchAllOverloadsWithUnifiedLock(harmony, t, "TryGiveJob", "AutoThinkNode: " + t.Name + ".TryGiveJob");
-                                PatchAllOverloadsWithUnifiedLock(harmony, t, "TryIssueJobPackage", "AutoThinkNode: " + t.Name + ".TryIssueJobPackage");
-                                PatchAllOverloadsWithUnifiedLock(harmony, t, "Satisfied", "AutoThinkNode: " + t.Name + ".Satisfied");
                             }
                             else if (typeof(InteractionWorker).IsAssignableFrom(t))
                             {
@@ -1427,7 +1424,6 @@ namespace OmniThreadUltimate
             }
         }
 
-        // Strict single-lock invariant (|L| = 1): LeafModCacheLock aliases GlobalSyncLock to prevent AB-BA deadlocks
         public static object LeafModCacheLock
         {
             get { return ParallelTickEngine.GlobalSyncLock; }
@@ -1698,7 +1694,7 @@ namespace OmniThreadUltimate
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && statWorker != null)
             {
-                __result = ThreadLocalStatCache.GetOrAddUnfinalized(statWorker, req, applyPostProcess, 250);
+                __result = ThreadLocalStatCache.GetOrAddUnfinalized(statWorker, req, applyPostProcess, 600);
                 return false;
             }
             return true;
@@ -1746,11 +1742,11 @@ namespace OmniThreadUltimate
                 }
                 else if (stat != null && stat.Worker != null)
                 {
-                    __result = ThreadLocalStatCache.GetOrAdd(stat.Worker, thing, applyPostProcess, 250);
+                    __result = ThreadLocalStatCache.GetOrAdd(stat.Worker, thing, applyPostProcess, 600);
                 }
                 else
                 {
-                    __result = StatExtension.GetStatValue(thing, stat, applyPostProcess, 250);
+                    __result = StatExtension.GetStatValue(thing, stat, applyPostProcess, 600);
                 }
                 return false;
             }

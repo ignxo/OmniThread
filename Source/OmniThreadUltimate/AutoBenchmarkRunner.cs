@@ -15,11 +15,12 @@ namespace OmniThreadUltimate
 {
     public static class AutoBenchmarkRunner
     {
-        public const int TargetBenchmarkTicks = 3000;
+        public static int TargetBenchmarkTicks = 3000;
         public const int TargetSpawnPawnCount = 250;
-        public const int WarmupTicksAfterMapLoad = 20;
+        public const int WarmupTicksAfterMapLoad = 120;
 
         public static bool IsAutoTestMode = false;
+        public static string AutoTestSaveName = null;
         public static bool MapLaunchTriggered = false;
         public static bool PawnsSpawned = false;
         public static bool IsMeasuring = false;
@@ -36,10 +37,26 @@ namespace OmniThreadUltimate
         private static readonly List<float> TickListDurationsMs = new List<float>(TargetBenchmarkTicks + 64);
         private static readonly List<int> TickActiveThreadCounts = new List<int>(TargetBenchmarkTicks + 64);
         private static readonly Stopwatch WallClockStopwatch = new Stopwatch();
+        private static readonly Stopwatch HeartbeatStopwatch = new Stopwatch();
 
         public static void InitializeFromCommandLine()
         {
             IsAutoTestMode = GenCommandLine.CommandLineArgPassed("autotest");
+            string saveVal;
+            if (GenCommandLine.TryGetCommandLineArg("autotest-save", out saveVal) && !string.IsNullOrEmpty(saveVal))
+            {
+                AutoTestSaveName = saveVal.Trim();
+                IsAutoTestMode = true;
+            }
+            string ticksVal;
+            if (GenCommandLine.TryGetCommandLineArg("autotest-ticks", out ticksVal) && !string.IsNullOrEmpty(ticksVal))
+            {
+                int parsedTicks;
+                if (int.TryParse(ticksVal.Trim(), out parsedTicks) && parsedTicks > 10)
+                {
+                    TargetBenchmarkTicks = parsedTicks;
+                }
+            }
             string iterVal;
             if (GenCommandLine.TryGetCommandLineArg("omnithread-iter", out iterVal) && !string.IsNullOrEmpty(iterVal))
             {
@@ -54,8 +71,9 @@ namespace OmniThreadUltimate
             if (IsAutoTestMode)
             {
                 OmniThreadGUI.ShowOverlay = true;
-                Log.Message(string.Format("[OmniThread Ultimate] -autotest detected! IterationLevel={0}, EnableMultithreading={1}",
-                    OmniThreadMod.IterationLevel, OmniThreadMod.EnableMultithreading));
+                HeartbeatStopwatch.Restart();
+                Log.Message(string.Format("[OmniThread Ultimate] -autotest detected! Save='{0}', TargetTicks={1}, IterationLevel={2}, EnableMultithreading={3}",
+                    AutoTestSaveName ?? "<quicktest>", TargetBenchmarkTicks, OmniThreadMod.IterationLevel, OmniThreadMod.EnableMultithreading));
                 EnsureModActiveInModsConfig();
             }
         }
@@ -88,6 +106,13 @@ namespace OmniThreadUltimate
             }
 
             MapLaunchTriggered = true;
+            if (!string.IsNullOrEmpty(AutoTestSaveName))
+            {
+                Log.Message("[OmniThread Ultimate] AutoTest: Triggering automatic load of save '" + AutoTestSaveName + "'...");
+                GameDataSaveLoader.LoadGame(AutoTestSaveName);
+                return;
+            }
+
             Log.Message("[OmniThread Ultimate] AutoTest: Triggering automatic test map generation and load...");
 
             LongEventHandler.QueueLongEvent(delegate
@@ -115,8 +140,12 @@ namespace OmniThreadUltimate
                 ShutdownDelayFrames++;
                 if (ShutdownDelayFrames >= 8)
                 {
-                    Log.Message("[OmniThread Ultimate] AutoTest: Calling Root.Shutdown()...");
-                    Root.Shutdown();
+                    if (Current.Game != null && Current.Game.Info != null)
+                    {
+                        Current.Game.Info.permadeathMode = false;
+                    }
+                    Log.Message("[OmniThread Ultimate] AutoTest: Calling Environment.Exit(0)...");
+                    Environment.Exit(0);
                 }
                 return;
             }
@@ -124,6 +153,20 @@ namespace OmniThreadUltimate
             if (Current.ProgramState != ProgramState.Playing || Find.CurrentMap == null || Find.TickManager == null)
             {
                 return;
+            }
+
+            if (HeartbeatStopwatch.ElapsedMilliseconds >= 4000)
+            {
+                HeartbeatStopwatch.Restart();
+                Log.Message(string.Format(CultureInfo.InvariantCulture,
+                    "[OmniThread Heartbeat] Frame={0} | RecordedTicks={1}/{2} | LastTick={3:F2} ms | RollingAvg={4:F2} ms | RoutedModTicks={5} | CaughtEx={6}",
+                    Time.frameCount,
+                    RecordedTicks,
+                    TargetBenchmarkTicks,
+                    ParallelTickEngine.LastTickMs,
+                    ParallelTickEngine.RollingAvgTickMs,
+                    ModCompatibilityManager.MainThreadRoutedModThingTicks,
+                    MainThreadSyncQueue.CaughtConcurrencyExceptions));
             }
 
             if (Find.TickManager.CurTimeSpeed != TimeSpeed.Ultrafast)
@@ -136,7 +179,19 @@ namespace OmniThreadUltimate
                 MapLoadedTickCount++;
                 if (MapLoadedTickCount >= WarmupTicksAfterMapLoad)
                 {
-                    SpawnBenchmarkPawns(Find.CurrentMap);
+                    if (string.IsNullOrEmpty(AutoTestSaveName))
+                    {
+                        SpawnBenchmarkPawns(Find.CurrentMap);
+                    }
+                    else
+                    {
+                        if (Current.Game != null && Current.Game.Info != null)
+                        {
+                            Current.Game.Info.permadeathMode = false;
+                        }
+                        Log.Message(string.Format("[OmniThread Ultimate] AutoTest Save '{0}' active! Existing spawned pawns on map = {1}. Starting {2}-tick benchmark at TimeSpeed.Ultrafast...",
+                            AutoTestSaveName, Find.CurrentMap.mapPawns.AllPawnsSpawnedCount, TargetBenchmarkTicks));
+                    }
                     PawnsSpawned = true;
                     IsMeasuring = true;
                     RecordedTicks = 0;
@@ -154,7 +209,10 @@ namespace OmniThreadUltimate
                     MainThreadSyncQueue.PreventedThreadHazards = 0;
                     ModCompatibilityManager.MainThreadRoutedModThingTicks = 0;
                     WallClockStopwatch.Restart();
-                    Log.Message("[OmniThread Ultimate] AutoTest: 250 Pawns spawned! Starting 3000-tick benchmark at TimeSpeed.Ultrafast...");
+                    if (string.IsNullOrEmpty(AutoTestSaveName))
+                    {
+                        Log.Message("[OmniThread Ultimate] AutoTest: 250 Pawns spawned! Starting 3000-tick benchmark at TimeSpeed.Ultrafast...");
+                    }
                 }
             }
         }
@@ -342,7 +400,7 @@ namespace OmniThreadUltimate
             TickListDurationsMs.Add(ParallelTickEngine.LastTickListMs);
             TickActiveThreadCounts.Add(activeWorkers);
 
-            if (RecordedTicks % 500 == 0)
+            if (RecordedTicks % 200 == 0 || RecordedTicks == 1)
             {
                 double elapsedSec = WallClockStopwatch.Elapsed.TotalSeconds;
                 double currentWallTps = elapsedSec > 0.001 ? (RecordedTicks / elapsedSec) : 0.0;
@@ -454,6 +512,7 @@ namespace OmniThreadUltimate
             sb.AppendLine("{");
             sb.AppendFormat(CultureInfo.InvariantCulture, "  \"timestamp\": \"{0}\",\n", DateTime.Now.ToString("o", CultureInfo.InvariantCulture));
             sb.AppendFormat(CultureInfo.InvariantCulture, "  \"modName\": \"OmniThread Ultimate\",\n");
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"saveName\": \"{0}\",\n", AutoTestSaveName ?? "quicktest");
             sb.AppendFormat(CultureInfo.InvariantCulture, "  \"iterationLevel\": {0},\n", OmniThreadMod.IterationLevel);
             sb.AppendFormat(CultureInfo.InvariantCulture, "  \"multithreadingEnabled\": {0},\n", OmniThreadMod.EnableMultithreading ? "true" : "false");
             sb.AppendFormat(CultureInfo.InvariantCulture, "  \"logicalProcessors\": {0},\n", Environment.ProcessorCount);
@@ -551,7 +610,7 @@ namespace OmniThreadUltimate
     {
         public static bool Prefix(TickManager __instance, ref float __result)
         {
-            if (__instance.CurTimeSpeed == TimeSpeed.Ultrafast)
+            if (AutoBenchmarkRunner.IsAutoTestMode && __instance.CurTimeSpeed == TimeSpeed.Ultrafast)
             {
                 __result = 150f;
                 return false;
@@ -565,7 +624,7 @@ namespace OmniThreadUltimate
     {
         public static bool Prefix(ref bool __result)
         {
-            if (AutoBenchmarkRunner.IsAutoTestMode && AutoBenchmarkRunner.IsMeasuring)
+            if (AutoBenchmarkRunner.IsAutoTestMode && !AutoBenchmarkRunner.BenchmarkFinished)
             {
                 __result = false;
                 return false;

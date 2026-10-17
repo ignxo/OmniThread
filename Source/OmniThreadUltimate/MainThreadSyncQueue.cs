@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Runtime.Serialization;
 using System.Threading;
 using HarmonyLib;
 using RimWorld;
@@ -17,6 +19,82 @@ namespace OmniThreadUltimate
 
         public static int MainThreadId = -1;
         public static volatile bool InParallelSection = false;
+
+        public static Sustainer DummySustainer;
+        public static MoteBubble DummyMoteBubble;
+        private static FieldInfo SustainerEndRealTimeField;
+        private static FieldInfo SustainerLastMaintainTickField;
+
+        public static Sustainer GetDummySustainer()
+        {
+            if (DummySustainer == null)
+            {
+                try
+                {
+                    Sustainer dummy = (Sustainer)FormatterServices.GetUninitializedObject(typeof(Sustainer));
+                    if (SustainerEndRealTimeField == null)
+                    {
+                        SustainerEndRealTimeField = typeof(Sustainer).GetField("endRealTime", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    }
+                    if (SustainerEndRealTimeField != null)
+                    {
+                        SustainerEndRealTimeField.SetValue(dummy, -1f);
+                    }
+                    dummy.externalParams = new SoundParams();
+                    dummy.scopeFader = new SustainerScopeFader();
+                    dummy.def = new SoundDef();
+                    FieldInfo subSustainersField = typeof(Sustainer).GetField("subSustainers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    if (subSustainersField != null)
+                    {
+                        subSustainersField.SetValue(dummy, new List<SubSustainer>());
+                    }
+                    DummySustainer = dummy;
+                }
+                catch
+                {
+                }
+            }
+            return DummySustainer;
+        }
+
+        public static void SetSustainerMaintainTickSafe(Sustainer sustainer, int tick)
+        {
+            if (sustainer == null || ReferenceEquals(sustainer, DummySustainer))
+            {
+                return;
+            }
+            try
+            {
+                if (SustainerLastMaintainTickField == null)
+                {
+                    SustainerLastMaintainTickField = typeof(Sustainer).GetField("lastMaintainTick", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                }
+                if (SustainerLastMaintainTickField != null)
+                {
+                    SustainerLastMaintainTickField.SetValue(sustainer, tick);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        public static MoteBubble GetDummyMoteBubble()
+        {
+            if (DummyMoteBubble == null)
+            {
+                try
+                {
+                    MoteBubble dummy = (MoteBubble)FormatterServices.GetUninitializedObject(typeof(MoteBubble));
+                    dummy.def = new ThingDef();
+                    DummyMoteBubble = dummy;
+                }
+                catch
+                {
+                }
+            }
+            return DummyMoteBubble;
+        }
 
         public static long TotalEnqueuedActions = 0;
         public static long TotalFlushedActions = 0;
@@ -45,6 +123,8 @@ namespace OmniThreadUltimate
         public static void InitializeOnMainThread()
         {
             MainThreadId = Thread.CurrentThread.ManagedThreadId;
+            GetDummySustainer();
+            GetDummyMoteBubble();
         }
 
         public static void Enqueue(Action action)
@@ -174,7 +254,7 @@ namespace OmniThreadUltimate
                 string clean = text.Replace("\r", "").Replace("\n", " | ");
                 string formatted = string.Format("[OmniThread WorkerLog][Thread {0}] {1}",
                     Thread.CurrentThread.ManagedThreadId,
-                    clean.Length > 380 ? clean.Substring(0, 380) : clean);
+                    clean.Length > 1200 ? clean.Substring(0, 1200) : clean);
                 RecentExceptions.Enqueue(formatted);
             }
         }
@@ -437,7 +517,130 @@ namespace OmniThreadUltimate
                 return true;
             }
             Interlocked.Increment(ref MainThreadSyncQueue.PreventedThreadHazards);
-            __result = null;
+            __result = MainThreadSyncQueue.GetDummySustainer();
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(Sustainer), "Maintain")]
+    public static class Patch_Sustainer_Maintain
+    {
+        public static bool Prefix(Sustainer __instance)
+        {
+            if (__instance == null || ReferenceEquals(__instance, MainThreadSyncQueue.DummySustainer))
+            {
+                return false;
+            }
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            if (Find.TickManager != null)
+            {
+                MainThreadSyncQueue.SetSustainerMaintainTickSafe(__instance, Find.TickManager.TicksGame);
+            }
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(Sustainer), "End")]
+    public static class Patch_Sustainer_End
+    {
+        public static bool Prefix(Sustainer __instance)
+        {
+            if (__instance == null || ReferenceEquals(__instance, MainThreadSyncQueue.DummySustainer))
+            {
+                return false;
+            }
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            Sustainer sustRef = __instance;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (sustRef != null && !sustRef.Ended)
+                {
+                    sustRef.End();
+                }
+            });
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(SoundParams), "set_Item")]
+    public static class Patch_SoundParams_set_Item
+    {
+        public static bool Prefix(SoundParams __instance)
+        {
+            if (__instance == null || (MainThreadSyncQueue.DummySustainer != null && ReferenceEquals(__instance, MainThreadSyncQueue.DummySustainer.externalParams)))
+            {
+                return false;
+            }
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(MoteBubble), "SetupMoteBubble")]
+    public static class Patch_MoteBubble_SetupMoteBubble
+    {
+        public static bool Prefix(MoteBubble __instance)
+        {
+            if (__instance == null || ReferenceEquals(__instance, MainThreadSyncQueue.DummyMoteBubble))
+            {
+                return false;
+            }
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(Ability), "MoteTick")]
+    public static class Patch_Ability_MoteTick
+    {
+        private static Action<Ability> MoteTickDelegate;
+        private static bool DelegateInitialized;
+
+        public static bool Prefix(Ability __instance)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            if (__instance == null || !__instance.Casting)
+            {
+                return false;
+            }
+            if (!DelegateInitialized)
+            {
+                DelegateInitialized = true;
+                try
+                {
+                    MethodInfo mi = typeof(Ability).GetMethod("MoteTick", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    if (mi != null)
+                    {
+                        MoteTickDelegate = (Action<Ability>)Delegate.CreateDelegate(typeof(Action<Ability>), mi);
+                    }
+                }
+                catch
+                {
+                }
+            }
+            Ability abRef = __instance;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (abRef != null && abRef.Casting && MoteTickDelegate != null)
+                {
+                    MoteTickDelegate(abRef);
+                }
+            });
             return false;
         }
     }
@@ -531,7 +734,7 @@ namespace OmniThreadUltimate
                     MoteMaker.MakeMoodThoughtBubble(pawnRef, thoughtRef);
                 }
             });
-            __result = null;
+            __result = MainThreadSyncQueue.GetDummyMoteBubble();
             return false;
         }
     }
@@ -555,7 +758,7 @@ namespace OmniThreadUltimate
                     MoteMaker.MakeThoughtBubble(pawnRef, iconRef, maintainRef);
                 }
             });
-            __result = null;
+            __result = MainThreadSyncQueue.GetDummyMoteBubble();
             return false;
         }
     }
@@ -570,7 +773,7 @@ namespace OmniThreadUltimate
                 return true;
             }
             Interlocked.Increment(ref MainThreadSyncQueue.PreventedThreadHazards);
-            __result = null;
+            __result = MainThreadSyncQueue.GetDummyMoteBubble();
             return false;
         }
     }
@@ -585,7 +788,7 @@ namespace OmniThreadUltimate
                 return true;
             }
             Interlocked.Increment(ref MainThreadSyncQueue.PreventedThreadHazards);
-            __result = null;
+            __result = MainThreadSyncQueue.GetDummyMoteBubble();
             return false;
         }
     }
