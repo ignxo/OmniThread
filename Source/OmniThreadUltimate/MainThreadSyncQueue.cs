@@ -249,6 +249,13 @@ namespace OmniThreadUltimate
         public static void RecordWorkerLogError(string text)
         {
             Interlocked.Increment(ref PreventedThreadHazards);
+            if (!string.IsNullOrEmpty(text) &&
+                (text.IndexOf("OmniThread loop guard:", StringComparison.Ordinal) >= 0 ||
+                 text.IndexOf("Can't start LayDown toil", StringComparison.Ordinal) >= 0 ||
+                 text.IndexOf("Could not resolve symbol", StringComparison.Ordinal) >= 0))
+            {
+                return;
+            }
             if (RecentExceptions.Count < 50 && !string.IsNullOrEmpty(text))
             {
                 string clean = text.Replace("\r", "").Replace("\n", " | ");

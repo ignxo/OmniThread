@@ -708,7 +708,6 @@ namespace OmniThreadUltimate
                     }
                 }
 
-                // Main Thread actively participates as worker slot `bgWorkersToWake`
                 ExecuteIter5WorkerLoop(workBuf, workCount, ticksGame, isNormalTick, bgWorkersToWake);
 
                 if (bgWorkersToWake > 0)
@@ -5738,6 +5737,92 @@ namespace OmniThreadUltimate
                         }
                     });
                 }
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(WealthWatcher), "ForceRecount")]
+    public static class Patch_WealthWatcher_ForceRecount
+    {
+        private static readonly FieldInfo Field_lastCountTick = AccessTools.Field(typeof(WealthWatcher), "lastCountTick");
+
+        public static bool Prefix(WealthWatcher __instance, bool allowDuringInit)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
+            {
+                if (Field_lastCountTick != null && Find.TickManager != null)
+                {
+                    Field_lastCountTick.SetValue(__instance, (float)Find.TickManager.TicksGame);
+                }
+                WealthWatcher ww = __instance;
+                bool allow = allowDuringInit;
+                MainThreadSyncQueue.Enqueue(delegate
+                {
+                    if (ww != null)
+                    {
+                        ww.ForceRecount(allow);
+                    }
+                });
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch]
+    public static class Patch_Pawn_RecordsTracker_RecordsTickInterval
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodInfo m1 = AccessTools.Method(typeof(Pawn_RecordsTracker), "RecordsTickInterval");
+            if (m1 != null)
+            {
+                yield return m1;
+            }
+            MethodInfo m2 = AccessTools.Method(typeof(Pawn_RecordsTracker), "RecordsTickUpdate");
+            if (m2 != null)
+            {
+                yield return m2;
+            }
+        }
+
+        public static Exception Finalizer(Exception __exception)
+        {
+            if (__exception is NullReferenceException && OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                return null;
+            }
+            return __exception;
+        }
+    }
+
+    [HarmonyPatch]
+    public static class Patch_ReachabilityCache_Clear
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodInfo m1 = AccessTools.Method(typeof(ReachabilityCache), "Clear");
+            if (m1 != null) yield return m1;
+            MethodInfo m2 = AccessTools.Method(typeof(ReachabilityCache), "ClearFor");
+            if (m2 != null) yield return m2;
+            MethodInfo m3 = AccessTools.Method(typeof(ReachabilityCache), "ClearForHostile");
+            if (m3 != null) yield return m3;
+        }
+
+        public static bool Prefix(ReachabilityCache __instance)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
+            {
+                ReachabilityCache rc = __instance;
+                MainThreadSyncQueue.Enqueue(delegate
+                {
+                    if (rc != null)
+                    {
+                        rc.Clear();
+                    }
+                });
                 return false;
             }
             return true;
