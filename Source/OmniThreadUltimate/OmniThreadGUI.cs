@@ -38,7 +38,7 @@ namespace OmniThreadUltimate
             UpdateWallTpsCounter();
 
             float panelWidth = 360f;
-            float panelHeight = 330f;
+            float panelHeight = 352f;
             Rect panelRect = new Rect(180f, 14f, panelWidth, panelHeight);
 
             Widgets.DrawBoxSolid(panelRect, new Color(0.06f, 0.08f, 0.12f, 0.88f));
@@ -118,6 +118,14 @@ namespace OmniThreadUltimate
                 if (Widgets.ButtonText(modeBtnRect, btnLabel))
                 {
                     OmniThreadMod.EnableMultithreading = !OmniThreadMod.EnableMultithreading;
+                }
+                curY += 22f;
+
+                Rect speedCapBtnRect = new Rect(leftX, curY, innerWidth, 20f);
+                string speedCapLabel = OmniThreadMod.UncapMaxTimeSpeed ? "Max Speed (>>>): UNCAPPED (Click to cap 360)" : "Max Speed (>>>): 360 TPS CAP (Click to uncap)";
+                if (Widgets.ButtonText(speedCapBtnRect, speedCapLabel))
+                {
+                    OmniThreadMod.UncapMaxTimeSpeed = !OmniThreadMod.UncapMaxTimeSpeed;
                 }
                 curY += 22f;
             }

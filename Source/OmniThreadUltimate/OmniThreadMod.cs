@@ -11,6 +11,7 @@ namespace OmniThreadUltimate
     public static class OmniThreadMod
     {
         public static bool EnableMultithreading = true;
+        public static bool UncapMaxTimeSpeed = true;
         public static int IterationLevel = 5;
 
         static OmniThreadMod()

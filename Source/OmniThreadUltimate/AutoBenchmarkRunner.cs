@@ -615,6 +615,22 @@ namespace OmniThreadUltimate
                 __result = 150f;
                 return false;
             }
+
+            if (OmniThreadMod.UncapMaxTimeSpeed && __instance != null)
+            {
+                TimeSpeed speed = __instance.CurTimeSpeed;
+                if (speed == TimeSpeed.Superfast || speed == TimeSpeed.Ultrafast)
+                {
+                    if (speed == TimeSpeed.Superfast && __instance.slower != null && __instance.slower.ForcedNormalSpeed && !AutoBenchmarkRunner.IsAutoTestMode)
+                    {
+                        return true;
+                    }
+
+                    __result = 150f;
+                    return false;
+                }
+            }
+
             return true;
         }
     }
