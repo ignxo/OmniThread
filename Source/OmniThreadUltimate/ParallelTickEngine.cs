@@ -20,7 +20,7 @@ namespace OmniThreadUltimate
         public static readonly object GlobalSyncLock = new object();
         public static readonly object PositionLock = GlobalSyncLock;
         public static readonly object PathFinderLock = GlobalSyncLock;
-        public static readonly object PathPoolLock = new object();
+        public static readonly object PathPoolLock = GlobalSyncLock;
         public static readonly object AttackTargetsLock = GlobalSyncLock;
         public static readonly object RegionTraverserLock = GlobalSyncLock;
         public static readonly object ReachabilityLock = GlobalSyncLock;
@@ -28,7 +28,7 @@ namespace OmniThreadUltimate
         public static readonly object HealthTrackerLock = GlobalSyncLock;
         public static readonly object MapPawnsLock = GlobalSyncLock;
         public static readonly object WorkSettingsLock = GlobalSyncLock;
-        public static readonly object JobPoolLock = new object();
+        public static readonly object JobPoolLock = GlobalSyncLock;
         public static readonly object HostilityFleeLock = GlobalSyncLock;
         public static readonly object WanderUtilityLock = GlobalSyncLock;
         public static readonly object AttackTargetFinderLock = GlobalSyncLock;
@@ -353,6 +353,7 @@ namespace OmniThreadUltimate
         private static int MaxBackgroundWorkers = 0;
         private static Thread[] DedicatedWorkers;
         private static ManualResetEventSlim[] WorkerWakeEvents;
+        private static Thing[] WorkerCurrentThing;
         private static readonly ManualResetEventSlim Iter5DoneEvent = new ManualResetEventSlim(false, 200);
         private static int Iter5SharedWorkIndex = -1;
         private static volatile int Iter5CurrentWorkCount = 0;
@@ -369,6 +370,7 @@ namespace OmniThreadUltimate
             MaxBackgroundWorkers = desiredBgWorkers;
             WorkerWakeEvents = new ManualResetEventSlim[desiredBgWorkers];
             DedicatedWorkers = new Thread[desiredBgWorkers];
+            WorkerCurrentThing = new Thing[desiredBgWorkers + 1];
             for (int i = 0; i < desiredBgWorkers; i++)
             {
                 WorkerWakeEvents[i] = new ManualResetEventSlim(false, 200);
@@ -386,27 +388,51 @@ namespace OmniThreadUltimate
             ManualResetEventSlim wakeEvent = WorkerWakeEvents[workerIdx];
             while (true)
             {
-                wakeEvent.Wait();
-                wakeEvent.Reset();
                 try
                 {
-                    ExecuteIter5WorkerLoop(Iter5WorkBuffer, Iter5CurrentWorkCount, Iter5CurrentTicksGame, Iter5CurrentIsNormalTick);
-                }
-                catch (Exception ex)
-                {
-                    MainThreadSyncQueue.RecordWorkerException("DedicatedWorkerLoop", ex);
-                }
-                finally
-                {
-                    if (Interlocked.Decrement(ref Iter5PendingWorkers) == 0)
+                    wakeEvent.Wait();
+                    wakeEvent.Reset();
+                    try
                     {
-                        Iter5DoneEvent.Set();
+                        ExecuteIter5WorkerLoop(Iter5WorkBuffer, Iter5CurrentWorkCount, Iter5CurrentTicksGame, Iter5CurrentIsNormalTick, workerIdx);
                     }
+                    catch (ThreadAbortException)
+                    {
+                        Thing stuck = WorkerCurrentThing != null && workerIdx < WorkerCurrentThing.Length ? WorkerCurrentThing[workerIdx] : null;
+                        WorkerCurrentThing[workerIdx] = null;
+                        Thread.ResetAbort();
+                        if (stuck != null)
+                        {
+                            ModCompatibilityManager.MarkThingFaultedForMainThread(stuck);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MainThreadSyncQueue.RecordWorkerException("DedicatedWorkerLoop", ex);
+                    }
+                    finally
+                    {
+                        if (WorkerCurrentThing != null && workerIdx < WorkerCurrentThing.Length)
+                        {
+                            WorkerCurrentThing[workerIdx] = null;
+                        }
+                        if (Interlocked.Decrement(ref Iter5PendingWorkers) <= 0)
+                        {
+                            Iter5DoneEvent.Set();
+                        }
+                    }
+                }
+                catch (ThreadAbortException)
+                {
+                    Thread.ResetAbort();
+                }
+                catch
+                {
                 }
             }
         }
 
-        private static void ExecuteIter5WorkerLoop(Thing[] workBuf, int workCount, int ticksGame, bool isNormalTick)
+        private static void ExecuteIter5WorkerLoop(Thing[] workBuf, int workCount, int ticksGame, bool isNormalTick, int workerSlot)
         {
             int tid = Thread.CurrentThread.ManagedThreadId;
             if ((uint)tid < 16384u)
@@ -440,7 +466,7 @@ namespace OmniThreadUltimate
                 try
                 {
                     Type tType = thing.GetType();
-                    if (tType != typeof(Pawn) && ModCompatibilityManager.ShouldTickOnMainThread(thing, tType))
+                    if (ModCompatibilityManager.ShouldTickOnMainThread(thing, tType))
                     {
                         Interlocked.Increment(ref ModCompatibilityManager.MainThreadRoutedModThingTicks);
                         int mtSlot = Interlocked.Increment(ref Iter5MainThreadCount) - 1;
@@ -463,6 +489,11 @@ namespace OmniThreadUltimate
                         continue;
                     }
 
+                    if (WorkerCurrentThing != null && (uint)workerSlot < (uint)WorkerCurrentThing.Length)
+                    {
+                        WorkerCurrentThing[workerSlot] = thing;
+                    }
+
                     localThingTicks++;
                     if (isNormalTick)
                     {
@@ -481,9 +512,22 @@ namespace OmniThreadUltimate
                         }
                     }
                     thing.DoTick();
+
+                    if (WorkerCurrentThing != null && (uint)workerSlot < (uint)WorkerCurrentThing.Length)
+                    {
+                        WorkerCurrentThing[workerSlot] = null;
+                    }
+                }
+                catch (ThreadAbortException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
+                    if (WorkerCurrentThing != null && (uint)workerSlot < (uint)WorkerCurrentThing.Length)
+                    {
+                        WorkerCurrentThing[workerSlot] = null;
+                    }
                     if (!ModCompatibilityManager.HandleWorkerThingException(thing, "Iter5Chunk.DoTick", ex))
                     {
                         MainThreadSyncQueue.RecordWorkerException("Iter5Chunk.DoTick(" + thing.ToStringSafe() + ")", ex);
@@ -601,11 +645,34 @@ namespace OmniThreadUltimate
                     }
                 }
 
-                ExecuteIter5WorkerLoop(workBuf, workCount, ticksGame, isNormalTick);
+                ExecuteIter5WorkerLoop(workBuf, workCount, ticksGame, isNormalTick, MaxBackgroundWorkers);
 
                 if (bgWorkersToWake > 0)
                 {
-                    Iter5DoneEvent.Wait();
+                    // Hard 3000ms Anti-Freeze Watchdog: never let the Unity UI thread hang indefinitely
+                    if (!Iter5DoneEvent.Wait(3000))
+                    {
+                        Interlocked.Exchange(ref Iter5SharedWorkIndex, workCount);
+                        for (int w = 0; w < bgWorkersToWake; w++)
+                        {
+                            Thing stuckThing = WorkerCurrentThing != null && w < WorkerCurrentThing.Length ? WorkerCurrentThing[w] : null;
+                            if (stuckThing != null)
+                            {
+                                ModCompatibilityManager.MarkThingFaultedForMainThread(stuckThing);
+                                Log.Warning(string.Format("[OmniThread Ultimate] Watchdog recovered stuck worker #{0} on '{1}' (id={2}) — isolating to MainThread.",
+                                    w + 1, stuckThing.ToStringSafe(), stuckThing.thingIDNumber));
+                                try
+                                {
+                                    DedicatedWorkers[w].Abort();
+                                }
+                                catch
+                                {
+                                }
+                            }
+                        }
+                        Iter5DoneEvent.Wait(500);
+                        Interlocked.Exchange(ref Iter5PendingWorkers, 0);
+                    }
                 }
             }
             finally

@@ -48,6 +48,7 @@ namespace OmniThreadUltimate
         private static IDictionary[] CAICompDicts;
         private static MethodInfo[] CAIMapCompGetters;
         private static bool[] PreWarmedThingIdFlags = new bool[262144];
+        private static bool[] FaultedThingIdFlags = new bool[262144];
         private static readonly HashSet<int> PreWarmedMapIds = new HashSet<int>();
         private static readonly Dictionary<int, int> LastPreWarmedMapThingCounts = new Dictionary<int, int>(8);
 
@@ -62,6 +63,9 @@ namespace OmniThreadUltimate
                 AppliedCompatibilityRules.Clear();
                 PreWarmedMapIds.Clear();
                 LastPreWarmedMapThingCounts.Clear();
+                Array.Clear(PreWarmedThingIdFlags, 0, PreWarmedThingIdFlags.Length);
+                Array.Clear(FaultedThingIdFlags, 0, FaultedThingIdFlags.Length);
+                LastPreWarmTailTick = -1;
                 AppliedModCompatPatchesCount = 0;
 
                 // Fast-path known safe vanilla concrete types
@@ -180,8 +184,52 @@ namespace OmniThreadUltimate
             return true;
         }
 
+        public static void MarkThingFaultedForMainThread(Thing thing)
+        {
+            if (thing == null)
+            {
+                return;
+            }
+            int id = thing.thingIDNumber;
+            if (id < 0)
+            {
+                return;
+            }
+            bool[] flags = FaultedThingIdFlags;
+            if (id >= flags.Length)
+            {
+                lock (ParallelTickEngine.GlobalSyncLock)
+                {
+                    flags = FaultedThingIdFlags;
+                    if (id >= flags.Length)
+                    {
+                        int newLen = Math.Max(flags.Length * 2, id + 65536);
+                        bool[] newFlags = new bool[newLen];
+                        Array.Copy(flags, newFlags, flags.Length);
+                        FaultedThingIdFlags = newFlags;
+                        flags = newFlags;
+                    }
+                }
+            }
+            if (!flags[id])
+            {
+                flags[id] = true;
+                Interlocked.Increment(ref AutoSafeModFallbackTypesCount);
+            }
+        }
+
         public static bool ShouldTickOnMainThread(Thing thing, Type thingType)
         {
+            if (thing != null)
+            {
+                int id = thing.thingIDNumber;
+                bool[] faulted = FaultedThingIdFlags;
+                if ((uint)id < (uint)faulted.Length && faulted[id])
+                {
+                    return true;
+                }
+            }
+
             if (thingType == typeof(Pawn) || thingType == typeof(Plant))
             {
                 return false;
@@ -218,8 +266,12 @@ namespace OmniThreadUltimate
                 return false;
             }
 
+            // Isolate this specific faulted thingIDNumber onto the Main Thread so it stops throwing on worker threads,
+            // without ever blacklisting the entire Pawn/Plant class!
+            MarkThingFaultedForMainThread(thing);
+
             Type tType = thing.GetType();
-            if (tType != typeof(Pawn) && tType.Assembly != typeof(Thing).Assembly && ex != null)
+            if (tType != typeof(Pawn) && tType != typeof(Plant) && tType.Assembly != typeof(Thing).Assembly && ex != null)
             {
                 string msg = ex.Message ?? string.Empty;
                 string stack = ex.StackTrace ?? string.Empty;
@@ -470,16 +522,47 @@ namespace OmniThreadUltimate
                             }
                             else if (scanTailThisTick)
                             {
+                                if (map.mapPawns != null && map.mapPawns.AllPawnsSpawned != null)
+                                {
+                                    IReadOnlyList<Pawn> spawnedPawns = map.mapPawns.AllPawnsSpawned;
+                                    int pCount = spawnedPawns.Count;
+                                    for (int pIdx = 0; pIdx < pCount; pIdx++)
+                                    {
+                                        Pawn p = spawnedPawns[pIdx];
+                                        if (p != null)
+                                        {
+                                            PreWarmSingleThingWithComps(p);
+                                            if (p.equipment != null && p.equipment.AllEquipmentListForReading != null)
+                                            {
+                                                List<ThingWithComps> eqList = p.equipment.AllEquipmentListForReading;
+                                                for (int e = 0; e < eqList.Count; e++)
+                                                {
+                                                    PreWarmSingleThingWithComps(eqList[e]);
+                                                }
+                                            }
+                                            if (p.apparel != null && p.apparel.WornApparel != null)
+                                            {
+                                                List<Apparel> appList = p.apparel.WornApparel;
+                                                for (int a = 0; a < appList.Count; a++)
+                                                {
+                                                    PreWarmSingleThingWithComps(appList[a]);
+                                                }
+                                            }
+                                            if (p.carryTracker != null && p.carryTracker.CarriedThing != null)
+                                            {
+                                                PreWarmSingleThingWithComps(p.carryTracker.CarriedThing as ThingWithComps);
+                                            }
+                                        }
+                                    }
+                                }
+
                                 int lastCount;
                                 if (!LastPreWarmedMapThingCounts.TryGetValue(map.uniqueID, out lastCount))
                                 {
                                     lastCount = 0;
                                 }
-                                if (allCount > lastCount)
-                                {
-                                    int startIdx = Math.Max(0, lastCount - 8);
-                                    PreWarmThingList(allThings, startIdx, false);
-                                }
+                                int startIdx = Math.Max(0, Math.Min(lastCount - 16, allCount - 128));
+                                PreWarmThingList(allThings, startIdx, true);
                                 LastPreWarmedMapThingCounts[map.uniqueID] = allCount;
                             }
                         }
@@ -488,7 +571,7 @@ namespace OmniThreadUltimate
 
                 if (currentBucket != null)
                 {
-                    PreWarmThingList(currentBucket, 0, false);
+                    PreWarmThingList(currentBucket, 0, true);
                 }
             }
             catch
@@ -802,11 +885,11 @@ namespace OmniThreadUltimate
             PatchAllOverloadsWithUnifiedLock(harmony, typeof(FloodFiller), "FloodFill", "Verse: FloodFiller.FloodFill (Unified Lock)");
 
             // CombatAI TKCache / TKVCache / Dictionary / HashSet mutating methods
-            // Note: IsDormant, TryGetAvoidanceReader, TryGetSightReader, and GetCombatPersonality are lock-free or leaf-locked via PreWarmBeforeParallelTick
             PatchTypeMethodsWithUnifiedLock(harmony, "CombatAI.CombatAI_Utility", new string[]
             {
-                "TryGetNextDutyDest", "IsApproachingMeleeTarget", "TryGetAttackVerb",
-                "GetMovingShiftedPosition", "GetFloatGrid", "GetCellFlooder"
+                "IsDormant", "GetCombatPersonality", "TryGetNextDutyDest",
+                "TryGetAvoidanceReader", "TryGetSightReader", "IsApproachingMeleeTarget",
+                "TryGetAttackVerb", "GetMovingShiftedPosition", "GetFloatGrid", "GetCellFlooder"
             });
 
             PatchTypeMethodsWithLeafLock(harmony, "CombatAI.PersonalityTacker", new string[]
@@ -1030,11 +1113,7 @@ namespace OmniThreadUltimate
             PatchTypeMethodsWithUnifiedLock(harmony, "PrisonerRealism.SurrenderUtility", new string[] { "TrySurrender", "DoSurrender" });
 
             // 11. Popular Community Mods (Performance Optimizer, Hospitality, Dubs Bad Hygiene, Giddy-Up, Simple Sidearms, Pick Up And Haul, CommonSense)
-            Type perfOptGetCompType = FindModType("PerformanceOptimizer.Optimization_FasterGetCompReplacement");
-            if (perfOptGetCompType != null)
-            {
-                PatchMethodSkipInParallel(harmony, perfOptGetCompType, "Prefix", "PerformanceOptimizer: Optimization_FasterGetCompReplacement.Prefix (Skip in Parallel)");
-            }
+            PatchTypeMethodsWithUnifiedLock(harmony, "PerformanceOptimizer.Optimization_FasterGetCompReplacement", new string[] { "Prefix" });
             PatchTypeMethodsWithUnifiedLock(harmony, "Hospitality.MainTabWindow_Hospitality", new string[] { "Notify_PawnLeft" });
             PatchTypeMethodsWithUnifiedLock(harmony, "DubsBadHygiene.CompPipe", new string[] { "CompTick" });
             PatchTypeMethodsWithUnifiedLock(harmony, "PeteTimesSix.SimpleSidearms.Utilities.StatCalculator", new string[] { "canUseSidearmInstance" });
@@ -1054,9 +1133,15 @@ namespace OmniThreadUltimate
 
             try
             {
-                // Only scan rare combat/food/target methods — never per-tick Pawn/Pather/Health/Needs/Job methods!
                 MethodBase[] coreTickMethods = new MethodBase[]
                 {
+                    AccessTools.Method(typeof(Pawn), "Tick"),
+                    AccessTools.Method(typeof(Pawn_PathFollower), "PatherTick"),
+                    AccessTools.Method(typeof(Pawn_HealthTracker), "HealthTick"),
+                    AccessTools.Method(typeof(Pawn_NeedsTracker), "NeedsTrackerTick"),
+                    AccessTools.Method(typeof(Pawn_JobTracker), "JobTrackerTick"),
+                    AccessTools.Method(typeof(Pawn_MindState), "MindStateTick"),
+                    AccessTools.Method(typeof(Pawn_InteractionsTracker), "InteractionsTrackerTick"),
                     AccessTools.Method(typeof(Verb), "TryStartCastOn", new Type[] { typeof(LocalTargetInfo), typeof(LocalTargetInfo), typeof(bool), typeof(bool), typeof(bool), typeof(bool) }),
                     AccessTools.Method(typeof(Verb), "TryCastNextBurstShot"),
                     AccessTools.Method(typeof(FoodUtility), "BestFoodSourceOnMap"),
@@ -1085,46 +1170,6 @@ namespace OmniThreadUltimate
             {
                 Log.Warning("[OmniThread Ultimate] ScanAndProtectThirdPartyModHooks warning: " + ex.Message);
             }
-        }
-
-        private static bool DeclaringTypeHasStaticCollections(Type declType)
-        {
-            if (declType == null)
-            {
-                return false;
-            }
-            try
-            {
-                FieldInfo[] fields = declType.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                for (int i = 0; i < fields.Length; i++)
-                {
-                    FieldInfo f = fields[i];
-                    if (f == null || f.IsLiteral || f.IsInitOnly)
-                    {
-                        continue;
-                    }
-                    Type ft = f.FieldType;
-                    if (ft == null)
-                    {
-                        continue;
-                    }
-                    if (typeof(IDictionary).IsAssignableFrom(ft) || typeof(ICollection).IsAssignableFrom(ft))
-                    {
-                        return true;
-                    }
-                    string fn = ft.Name;
-                    if (fn.StartsWith("Dictionary`", StringComparison.Ordinal) ||
-                        fn.StartsWith("HashSet`", StringComparison.Ordinal) ||
-                        fn.StartsWith("List`", StringComparison.Ordinal))
-                    {
-                        return true;
-                    }
-                }
-            }
-            catch
-            {
-            }
-            return false;
         }
 
         private static void ProtectHarmonyPatchList(Harmony harmony, System.Collections.ObjectModel.ReadOnlyCollection<Patch> patches)
@@ -1164,11 +1209,6 @@ namespace OmniThreadUltimate
                     continue;
                 }
 
-                if (!DeclaringTypeHasStaticCollections(declType))
-                {
-                    continue;
-                }
-
                 try
                 {
                     PatchedMethods.Add(patchMethod);
@@ -1187,7 +1227,11 @@ namespace OmniThreadUltimate
             }
         }
 
-        public static readonly object LeafModCacheLock = new object();
+        // Strict single-lock invariant (|L| = 1): LeafModCacheLock aliases GlobalSyncLock to prevent AB-BA deadlocks
+        public static object LeafModCacheLock
+        {
+            get { return ParallelTickEngine.GlobalSyncLock; }
+        }
 
         private static void PatchTypeMethodsWithLeafLock(
             Harmony harmony,
@@ -1387,13 +1431,59 @@ namespace OmniThreadUltimate
             string methodName,
             string ruleDescription)
         {
-            PatchCustomPrefix(harmony, targetType, methodName, "SkipWhenInParallelPrefix", ruleDescription);
+            if (targetType == null || string.IsNullOrEmpty(methodName))
+            {
+                return;
+            }
+
+            try
+            {
+                MethodInfo voidSkipPrefix = AccessTools.Method(typeof(ModCompatibilityManager), "SkipWhenInParallelPrefix");
+                MethodInfo boolSkipPrefix = AccessTools.Method(typeof(ModCompatibilityManager), "SkipBoolPrefixWhenInParallel");
+                MethodInfo[] methods = targetType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly);
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    MethodInfo target = methods[i];
+                    if (target == null || target.Name != methodName || target.IsAbstract || target.IsGenericMethodDefinition)
+                    {
+                        continue;
+                    }
+                    if (!SkipPatchedMethods.Add(target))
+                    {
+                        continue;
+                    }
+
+                    MethodInfo chosenPrefix = (target.ReturnType == typeof(bool)) ? boolSkipPrefix : voidSkipPrefix;
+                    HarmonyMethod hmPrefix = new HarmonyMethod(chosenPrefix);
+                    hmPrefix.priority = Priority.First;
+
+                    harmony.Patch(target, hmPrefix, null, null, null);
+                    AppliedModCompatPatchesCount++;
+                    AppliedCompatibilityRules.Add(ruleDescription);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(string.Format("[OmniThread Ultimate] Could not patch skip prefix {0}.{1}: {2}",
+                    targetType.FullName, methodName, ex.Message));
+            }
         }
 
         public static bool SkipWhenInParallelPrefix()
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
             {
+                return false;
+            }
+            return true;
+        }
+
+        public static bool SkipBoolPrefixWhenInParallel(ref bool __result)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                __result = true;
                 return false;
             }
             return true;
