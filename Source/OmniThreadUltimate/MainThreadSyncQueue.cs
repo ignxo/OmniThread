@@ -419,6 +419,119 @@ namespace OmniThreadUltimate
         }
     }
 
+    [HarmonyPatch(typeof(JobDriver), "DriverTickInterval")]
+    public static class Patch_JobDriver_DriverTickInterval
+    {
+        public static bool Prefix(JobDriver __instance)
+        {
+            if (__instance == null || __instance.CurToilIndex < 0 || __instance.pawn == null || __instance.job == null || __instance.pawn.CurJob != __instance.job)
+            {
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(CompIngredients), "AllowStackWith")]
+    public static class Patch_CompIngredients_AllowStackWith
+    {
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(CompIngredients), "MergeIngredients")]
+    public static class Patch_CompIngredients_MergeIngredients
+    {
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(CompIngredients), "RegisterIngredient")]
+    public static class Patch_CompIngredients_RegisterIngredient
+    {
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(CompIngredients), "PreAbsorbStack")]
+    public static class Patch_CompIngredients_PreAbsorbStack
+    {
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(CompIngredients), "PostSplitOff")]
+    public static class Patch_CompIngredients_PostSplitOff
+    {
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(Thing), "DeSpawn")]
     public static class Patch_Thing_DeSpawn
     {
