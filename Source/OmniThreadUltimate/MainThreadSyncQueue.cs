@@ -386,6 +386,8 @@ namespace OmniThreadUltimate
         private static int tsLastStamp;
         [ThreadStatic]
         private static int tsTransitionCount;
+        [ThreadStatic]
+        private static int tsStackDepth;
 
         public static bool Prefix(JobDriver __instance)
         {
@@ -397,6 +399,12 @@ namespace OmniThreadUltimate
             {
                 return false;
             }
+            tsStackDepth++;
+            if (tsStackDepth > 16)
+            {
+                Interlocked.Increment(ref MainThreadSyncQueue.PreventedThreadHazards);
+                throw new InvalidOperationException("OmniThread loop guard: ReadyForNextToil recursion depth > 16.");
+            }
             int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
             if (tsLastStamp == stamp && ReferenceEquals(tsLastDriver, __instance))
             {
@@ -406,7 +414,7 @@ namespace OmniThreadUltimate
                     tsLastDriver = null;
                     tsTransitionCount = 0;
                     Interlocked.Increment(ref MainThreadSyncQueue.PreventedThreadHazards);
-                    return false;
+                    throw new InvalidOperationException("OmniThread loop guard: ReadyForNextToil transition count > 24 in one tick.");
                 }
             }
             else
@@ -416,6 +424,44 @@ namespace OmniThreadUltimate
                 tsTransitionCount = 1;
             }
             return true;
+        }
+
+        public static void Finalizer()
+        {
+            if (tsStackDepth > 0)
+            {
+                tsStackDepth--;
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(JobUtility), "TryStartErrorRecoverJob")]
+    public static class Patch_JobUtility_TryStartErrorRecoverJob
+    {
+        public static bool Prefix(Pawn pawn, string message, Exception exception, JobDriver concreteDriver)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            if (exception != null && exception.Message != null && exception.Message.IndexOf("OmniThread", StringComparison.Ordinal) >= 0)
+            {
+                Interlocked.Increment(ref MainThreadSyncQueue.PreventedThreadHazards);
+                return false;
+            }
+            MainThreadSyncQueue.RecordWorkerException("JobUtility.TryStartErrorRecoverJob: " + (message ?? ""), exception);
+            Pawn pawnRef = pawn;
+            string msgRef = message;
+            Exception exRef = exception;
+            JobDriver driverRef = concreteDriver;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (pawnRef != null && pawnRef.Spawned && !pawnRef.Dead)
+                {
+                    JobUtility.TryStartErrorRecoverJob(pawnRef, msgRef, exRef, driverRef);
+                }
+            });
+            return false;
         }
     }
 
