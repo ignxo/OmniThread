@@ -988,8 +988,47 @@ namespace OmniThreadUltimate
     public static class Patch_TickManager_DoSingleTick
     {
         private static int sLastFrameCount = -1;
+        private static int sLastHzCheckFrame = -1000;
+        private static double sTargetTickBudgetMs = 13.5;
+        public static int DetectedMonitorHz = 60;
         private static readonly Stopwatch sFrameStopwatch = new Stopwatch();
         private static readonly FieldInfo Field_realTimeToTickThrough = AccessTools.Field(typeof(TickManager), "realTimeToTickThrough");
+
+        private static void UpdateMonitorRefreshBudget(int currentFrame)
+        {
+            if (currentFrame - sLastHzCheckFrame < 120)
+            {
+                return;
+            }
+            sLastHzCheckFrame = currentFrame;
+            try
+            {
+#pragma warning disable 0618
+                int hz = Screen.currentResolution.refreshRate;
+#pragma warning restore 0618
+                if (hz < 30 || hz > 500)
+                {
+                    hz = 60;
+                }
+                DetectedMonitorHz = hz;
+                double frameIntervalMs = 1000.0 / hz;
+                // Reserve ~19% of each frame for Unity rendering/UI/input so FPS matches monitor Hz
+                double budget = frameIntervalMs * 0.81;
+                if (budget < 2.5)
+                {
+                    budget = 2.5;
+                }
+                else if (budget > 14.0)
+                {
+                    budget = 14.0;
+                }
+                sTargetTickBudgetMs = budget;
+            }
+            catch
+            {
+                sTargetTickBudgetMs = 13.5;
+            }
+        }
 
         public static void Prefix()
         {
@@ -999,6 +1038,7 @@ namespace OmniThreadUltimate
                 if (fc != sLastFrameCount)
                 {
                     sLastFrameCount = fc;
+                    UpdateMonitorRefreshBudget(fc);
                     sFrameStopwatch.Restart();
                 }
             }
@@ -1014,7 +1054,7 @@ namespace OmniThreadUltimate
             ParallelTickEngine.EndTickMeasurement();
             if (!AutoBenchmarkRunner.IsAutoTestMode && OmniThreadMod.UncapMaxTimeSpeed && __instance != null)
             {
-                if (sFrameStopwatch.Elapsed.TotalMilliseconds >= 13.5 && Field_realTimeToTickThrough != null)
+                if (sFrameStopwatch.Elapsed.TotalMilliseconds >= sTargetTickBudgetMs && Field_realTimeToTickThrough != null)
                 {
                     Field_realTimeToTickThrough.SetValue(__instance, 0f);
                 }
