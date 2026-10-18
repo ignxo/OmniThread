@@ -8,6 +8,7 @@ using HarmonyLib;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Verse.AI;
 using Verse.Sound;
 
 namespace OmniThreadUltimate
@@ -362,6 +363,62 @@ namespace OmniThreadUltimate
         }
     }
 
+    [HarmonyPatch(typeof(Thing), "CanStackWith")]
+    public static class Patch_Thing_CanStackWith
+    {
+        public static bool Prefix(Thing __instance, Thing other, ref bool __result)
+        {
+            if (__instance == null || other == null || ReferenceEquals(__instance, other) || __instance.stackCount <= 0 || other.stackCount <= 0)
+            {
+                __result = false;
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(JobDriver), "ReadyForNextToil")]
+    public static class Patch_JobDriver_ReadyForNextToil
+    {
+        [ThreadStatic]
+        private static JobDriver tsLastDriver;
+        [ThreadStatic]
+        private static int tsLastStamp;
+        [ThreadStatic]
+        private static int tsTransitionCount;
+
+        public static bool Prefix(JobDriver __instance)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            if (__instance == null)
+            {
+                return false;
+            }
+            int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+            if (tsLastStamp == stamp && ReferenceEquals(tsLastDriver, __instance))
+            {
+                tsTransitionCount++;
+                if (tsTransitionCount > 24)
+                {
+                    tsLastDriver = null;
+                    tsTransitionCount = 0;
+                    Interlocked.Increment(ref MainThreadSyncQueue.PreventedThreadHazards);
+                    return false;
+                }
+            }
+            else
+            {
+                tsLastStamp = stamp;
+                tsLastDriver = __instance;
+                tsTransitionCount = 1;
+            }
+            return true;
+        }
+    }
+
     [HarmonyPatch(typeof(Thing), "DeSpawn")]
     public static class Patch_Thing_DeSpawn
     {
@@ -386,7 +443,7 @@ namespace OmniThreadUltimate
             if (tsLastDeSpawnedStamp == stamp && ReferenceEquals(tsLastDeSpawnedThing, __instance))
             {
                 tsLastDeSpawnedCount++;
-                if (tsLastDeSpawnedCount > 8)
+                if (tsLastDeSpawnedCount > 2)
                 {
                     tsLastDeSpawnedThing = null;
                     tsLastDeSpawnedCount = 0;
@@ -418,8 +475,6 @@ namespace OmniThreadUltimate
         private static Thing tsLastDestroyedThing;
         [ThreadStatic]
         private static int tsLastDestroyedStamp;
-        [ThreadStatic]
-        private static int tsLastDestroyedCount;
 
         public static bool Prefix(Thing __instance, DestroyMode mode)
         {
@@ -444,18 +499,11 @@ namespace OmniThreadUltimate
             int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
             if (tsLastDestroyedStamp == stamp && ReferenceEquals(tsLastDestroyedThing, __instance))
             {
-                tsLastDestroyedCount++;
-                if (tsLastDestroyedCount > 8)
-                {
-                    tsLastDestroyedThing = null;
-                    tsLastDestroyedCount = 0;
-                    throw new InvalidOperationException("OmniThread loop guard: Thing.Destroy called repeatedly on same Thing in one tick.");
-                }
-                return false;
+                tsLastDestroyedThing = null;
+                throw new InvalidOperationException("OmniThread loop guard: Thing.Destroy called repeatedly on same Thing in one tick.");
             }
             tsLastDestroyedStamp = stamp;
             tsLastDestroyedThing = __instance;
-            tsLastDestroyedCount = 1;
 
             Thing thingRef = __instance;
             DestroyMode modeRef = mode;
@@ -477,8 +525,6 @@ namespace OmniThreadUltimate
         private static Thing tsLastSpawnedThing;
         [ThreadStatic]
         private static int tsLastSpawnedStamp;
-        [ThreadStatic]
-        private static int tsLastSpawnedCount;
 
         public static bool Prefix(Thing newThing, IntVec3 loc, Map map, Rot4 rot, WipeMode wipeMode, bool respawningAfterLoad, bool forbidLeavings, ref Thing __result)
         {
@@ -504,19 +550,11 @@ namespace OmniThreadUltimate
             int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
             if (tsLastSpawnedStamp == stamp && ReferenceEquals(tsLastSpawnedThing, newThing))
             {
-                tsLastSpawnedCount++;
-                if (tsLastSpawnedCount > 8)
-                {
-                    tsLastSpawnedThing = null;
-                    tsLastSpawnedCount = 0;
-                    throw new InvalidOperationException("OmniThread loop guard: GenSpawn.Spawn called repeatedly on same Thing in one tick.");
-                }
-                __result = newThing;
-                return false;
+                tsLastSpawnedThing = null;
+                throw new InvalidOperationException("OmniThread loop guard: GenSpawn.Spawn called repeatedly on same Thing in one tick.");
             }
             tsLastSpawnedStamp = stamp;
             tsLastSpawnedThing = newThing;
-            tsLastSpawnedCount = 1;
 
             if (!newThing.Spawned)
             {

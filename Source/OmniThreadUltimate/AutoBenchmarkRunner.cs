@@ -608,23 +608,38 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(TickManager), "get_TickRateMultiplier")]
     public static class Patch_TickManager_TickRateMultiplier
     {
+        [ThreadStatic]
+        private static bool tsInGetter;
+
         [HarmonyPriority(Priority.First)]
         public static bool Prefix(TickManager __instance, ref float __result)
         {
-            if (AutoBenchmarkRunner.IsAutoTestMode && __instance != null && __instance.CurTimeSpeed == TimeSpeed.Ultrafast)
+            if (tsInGetter || __instance == null)
             {
-                __result = 150f;
-                return false;
+                return true;
             }
-
-            if (OmniThreadMod.UncapMaxTimeSpeed && __instance != null)
+            try
             {
-                TimeSpeed speed = __instance.CurTimeSpeed;
-                if (speed == TimeSpeed.Superfast || speed == TimeSpeed.Ultrafast)
+                tsInGetter = true;
+                if (AutoBenchmarkRunner.IsAutoTestMode && __instance.CurTimeSpeed == TimeSpeed.Ultrafast)
                 {
                     __result = 150f;
                     return false;
                 }
+
+                if (OmniThreadMod.UncapMaxTimeSpeed)
+                {
+                    TimeSpeed speed = __instance.CurTimeSpeed;
+                    if (speed == TimeSpeed.Superfast || speed == TimeSpeed.Ultrafast)
+                    {
+                        __result = 150f;
+                        return false;
+                    }
+                }
+            }
+            finally
+            {
+                tsInGetter = false;
             }
 
             return true;
@@ -633,13 +648,25 @@ namespace OmniThreadUltimate
         [HarmonyPriority(Priority.Last)]
         public static void Postfix(TickManager __instance, ref float __result)
         {
-            if (OmniThreadMod.UncapMaxTimeSpeed && __instance != null)
+            if (tsInGetter || __instance == null)
             {
-                TimeSpeed speed = __instance.CurTimeSpeed;
-                if (speed == TimeSpeed.Superfast || speed == TimeSpeed.Ultrafast)
+                return;
+            }
+            try
+            {
+                tsInGetter = true;
+                if (OmniThreadMod.UncapMaxTimeSpeed)
                 {
-                    __result = 150f;
+                    TimeSpeed speed = __instance.CurTimeSpeed;
+                    if (speed == TimeSpeed.Superfast || speed == TimeSpeed.Ultrafast)
+                    {
+                        __result = 150f;
+                    }
                 }
+            }
+            finally
+            {
+                tsInGetter = false;
             }
         }
     }
