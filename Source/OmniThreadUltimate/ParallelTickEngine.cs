@@ -987,18 +987,38 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(TickManager), "DoSingleTick")]
     public static class Patch_TickManager_DoSingleTick
     {
+        private static int sLastFrameCount = -1;
+        private static readonly Stopwatch sFrameStopwatch = new Stopwatch();
+        private static readonly FieldInfo Field_realTimeToTickThrough = AccessTools.Field(typeof(TickManager), "realTimeToTickThrough");
+
         public static void Prefix()
         {
+            if (!AutoBenchmarkRunner.IsAutoTestMode)
+            {
+                int fc = Time.frameCount;
+                if (fc != sLastFrameCount)
+                {
+                    sLastFrameCount = fc;
+                    sFrameStopwatch.Restart();
+                }
+            }
             ParallelTickEngine.BeginTickMeasurement();
         }
 
-        public static void Postfix()
+        public static void Postfix(TickManager __instance)
         {
             if (OmniThreadMod.EnableMultithreading)
             {
                 MainThreadSyncQueue.Flush();
             }
             ParallelTickEngine.EndTickMeasurement();
+            if (!AutoBenchmarkRunner.IsAutoTestMode && OmniThreadMod.UncapMaxTimeSpeed && __instance != null)
+            {
+                if (sFrameStopwatch.Elapsed.TotalMilliseconds >= 13.5 && Field_realTimeToTickThrough != null)
+                {
+                    Field_realTimeToTickThrough.SetValue(__instance, 0f);
+                }
+            }
         }
     }
 
@@ -5747,6 +5767,7 @@ namespace OmniThreadUltimate
     public static class Patch_WealthWatcher_ForceRecount
     {
         private static readonly FieldInfo Field_lastCountTick = AccessTools.Field(typeof(WealthWatcher), "lastCountTick");
+        private static int sLastEnqueuedStamp = -1;
 
         public static bool Prefix(WealthWatcher __instance, bool allowDuringInit)
         {
@@ -5755,6 +5776,11 @@ namespace OmniThreadUltimate
                 if (Field_lastCountTick != null && Find.TickManager != null)
                 {
                     Field_lastCountTick.SetValue(__instance, (float)Find.TickManager.TicksGame);
+                }
+                int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+                if (Interlocked.Exchange(ref sLastEnqueuedStamp, stamp) == stamp)
+                {
+                    return false;
                 }
                 WealthWatcher ww = __instance;
                 bool allow = allowDuringInit;
@@ -5801,6 +5827,8 @@ namespace OmniThreadUltimate
     [HarmonyPatch]
     public static class Patch_ReachabilityCache_Clear
     {
+        private static int sLastEnqueuedStamp = -1;
+
         public static IEnumerable<MethodBase> TargetMethods()
         {
             MethodInfo m1 = AccessTools.Method(typeof(ReachabilityCache), "Clear");
@@ -5815,6 +5843,11 @@ namespace OmniThreadUltimate
         {
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
             {
+                int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+                if (Interlocked.Exchange(ref sLastEnqueuedStamp, stamp) == stamp)
+                {
+                    return false;
+                }
                 ReachabilityCache rc = __instance;
                 MainThreadSyncQueue.Enqueue(delegate
                 {

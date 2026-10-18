@@ -1050,11 +1050,18 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(ResourceCounter), "UpdateResourceCounts")]
     public static class Patch_ResourceCounter_UpdateResourceCounts
     {
+        private static int sLastEnqueuedStamp = -1;
+
         public static bool Prefix(ResourceCounter __instance)
         {
             if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
                 return true;
+            }
+            int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+            if (Interlocked.Exchange(ref sLastEnqueuedStamp, stamp) == stamp)
+            {
+                return false;
             }
             ResourceCounter rcRef = __instance;
             MainThreadSyncQueue.Enqueue(delegate
