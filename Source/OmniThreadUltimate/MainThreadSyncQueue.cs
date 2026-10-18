@@ -1000,4 +1000,112 @@ namespace OmniThreadUltimate
             return false;
         }
     }
+
+    [HarmonyPatch(typeof(ResourceCounter), "UpdateResourceCounts")]
+    public static class Patch_ResourceCounter_UpdateResourceCounts
+    {
+        public static bool Prefix(ResourceCounter __instance)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            ResourceCounter rcRef = __instance;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (rcRef != null)
+                {
+                    rcRef.UpdateResourceCounts();
+                }
+            });
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(ResourceCounter), "ResetResourceCounts")]
+    public static class Patch_ResourceCounter_ResetResourceCounts
+    {
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(ResourceCounter), "GetCount")]
+    public static class Patch_ResourceCounter_GetCount
+    {
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(RestUtility), "TuckIntoBed")]
+    public static class Patch_RestUtility_TuckIntoBed
+    {
+        public static bool Prefix(Building_Bed bed, Pawn taker, Pawn takee, bool rescued)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            Building_Bed bedRef = bed;
+            Pawn takerRef = taker;
+            Pawn takeeRef = takee;
+            bool rescuedRef = rescued;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (bedRef != null && takerRef != null && takeeRef != null)
+                {
+                    RestUtility.TuckIntoBed(bedRef, takerRef, takeeRef, rescuedRef);
+                }
+            });
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(Pawn), "Notify_Teleported")]
+    public static class Patch_Pawn_Notify_Teleported
+    {
+        public static bool Prefix(Pawn __instance, bool endCurrentJob, bool resetTweenedPos)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            Pawn pawnRef = __instance;
+            bool endJobRef = endCurrentJob;
+            bool resetPosRef = resetTweenedPos;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (pawnRef != null && pawnRef.Spawned)
+                {
+                    pawnRef.Notify_Teleported(endJobRef, resetPosRef);
+                }
+            });
+            return false;
+        }
+    }
 }
