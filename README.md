@@ -1,9 +1,9 @@
 # OmniThread Ultimate — Lock-Free Multi-Threaded Engine for RimWorld (1.3 – 1.7)
 
-![RimWorld 1.3-1.7](https://img.shields.io/badge/RimWorld-1.3%20%7C%201.4%20%7C%201.5%20%7C%201.6%20%7C%201.7-00d2ff?style=for-the-badge)
-![License MIT](https://img.shields.io/badge/License-MIT-50fa96?style=for-the-badge)
-![Threads 12+](https://img.shields.io/badge/Multi--Threading-Work--Stealing%20Pool-ff9e3b?style=for-the-badge)
-![RimPy Compatible](https://img.shields.io/badge/RimPy%20%26%20RimSort-Auto--Sort%20Ready-a970ff?style=for-the-badge)
+[![RimWorld 1.3-1.7](https://img.shields.io/badge/RimWorld-1.3%20%7C%201.4%20%7C%201.5%20%7C%201.6%20%7C%201.7-00d2ff?style=for-the-badge)](#how-to-install-step-by-step-guide)
+[![License MIT](https://img.shields.io/badge/License-MIT-50fa96?style=for-the-badge)](LICENSE)
+[![Threads 12+](https://img.shields.io/badge/Multi--Threading-Work--Stealing%20Pool-ff9e3b?style=for-the-badge)](#key-architecture--features)
+[![RimPy Compatible](https://img.shields.io/badge/RimPy%20%26%20RimSort-Auto--Sort%20Ready-a970ff?style=for-the-badge)](#option-a-using-rimpy-mod-manager--rimsort-recommended)
 
 **OmniThread Ultimate** is a high-performance C# (Harmony) multi-threading optimization mod for **RimWorld (1.3, 1.4, 1.5, 1.6, and 1.7)**. It parallelizes RimWorld's core simulation loop (`TickList.Tick()`, `Pawn.DoTick()`, `Pawn_NeedsTracker`, `AttackTargetsCache`, and `MapPostTick`) across all logical CPU cores while maintaining **100% deterministic memory safety (`caughtConcurrencyExceptions: 0`)** and broad compatibility with complex overhaul mods.
 
