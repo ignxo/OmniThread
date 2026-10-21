@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="About/Preview.png" alt="OmniThread Ultimate — Multi-Threading & Auto-Hz Engine for RimWorld" width="100%" />
+</p>
+
 # OmniThread Ultimate
 
 **Multi-threading and Auto-Hz frame-pacing engine for RimWorld (1.3 – 1.7).**  
@@ -147,25 +151,110 @@ flowchart LR
 
 ## Mod Compatibility
 
-- **60+ Supported Mods Out-of-the-Box:** Built-in profiles for **RocketMan**, **CAI-5000 (CombatAI)**, **Combat Extended (CE)**, **Vanilla Expanded Framework (VEF)**, **Vehicle Framework**, **Performance Optimizer**, **Performance Fish**, **Dubs Bad Hygiene**, **Hospitality**, **Pick Up And Haul**, **CommonSense**, and more.
-- **Automatic Load Order (`RimPy` / `RimSort`) & Auto-Guard:** Includes full `<loadAfter>` sorting rules in [`About/About.xml`](About/About.xml) and automatically wraps unknown third-party Harmony tick hooks in re-entrant synchronization at startup.
+- **68 Supported & Verified Mods Out-of-the-Box:** Built-in profiles for **RocketMan / Missile Girl**, **CAI-5000 (CombatAI)**, **Combat Extended (CE)**, **Vanilla Expanded Framework (VEF)**, **Vehicle Framework**, **Prepatcher**, **Zoology**, **Performance Fish**, **Performance Optimizer**, and more.
+- **Automatic Load Order (`RimPy` / `RimSort`) & Universal Auto-Guard:** Includes full `<loadAfter>` sorting rules in [`About/About.xml`](About/About.xml) and automatically scans and wraps unknown third-party Harmony `Prefix`/`Postfix` tick hooks in re-entrant synchronization (`396` active mod patches guarded in our 57-mod benchmark).
+
+| Flagship Mod | Package ID | Multi-Thread Integration Strategy |
+| :--- | :--- | :--- |
+| **RocketMan / Missile Girl** | `vr.missilegirl` | Lock-free parallel bypasses for `StatWorker_Patch`, `SignatureUtility`, and `GenTemperature_Patch` + `WorldPawns` time-dilation deduplication. |
+| **CAI-5000 (CombatAI)** | `Krkr.rule56` | Main-thread `CompCache` pre-warming (100% lock-free `TryGetValue` cache hits on workers) + thread-safe `SightTracker`, `AvoidanceTracker`, `CoverPositionFinder`, `RegionFlooder`, and `CellFlooder`. |
+| **Combat Extended (CE)** | `CETeam.CombatExtended` | Safe main-thread routing for ballistic `ProjectileCE` trajectories and thread-safe `LightingTracker` synchronization. |
+| **Vehicle Framework** | `SmashPhil.VehicleFramework` | Safe main-thread routing for multi-cell `VehiclePawn` movement and collision grids. |
+| **Vanilla Expanded (`VEF`)** | `OskarPotocki.VanillaFactionsExpanded.Core` | Built-in concurrency guards for `VPE`, `VSIE`, `VME`, `Vanilla Vehicles Expanded`, and `VEF` subsystems. |
+| **Zoology Mod** | `com.abobashark.zoologymod` | Thread-safe animal predation, scavenging, and custom `JobGiver` concurrency guards. |
+| **Prepatcher & Fishery** | `zetrith.prepatcher` / `bs.fishery` | Low-level field-injection and collection compatibility with `Prepatcher`, `Fishery`, and `Performance Fish`. |
 
 <details>
-<summary><b>Flagship Mod Profiles & Full 60+ Supported Mods List</b></summary>
+<summary><b>Full List of All 68 Verified & Supported Mods (with Package IDs)</b></summary>
 <br>
 
-| Mod | Package ID | Multi-Thread Integration Strategy |
-| :--- | :--- | :--- |
-| **RocketMan** | `vr.missilegirl` | Lock-free parallel bypasses for `StatWorker_Patch`, `SignatureUtility`, and `GenTemperature_Patch` + `WorldPawns` time-dilation deduplication. |
-| **CAI-5000 (CombatAI)** | `Krkr.rule56` | Main-thread `CompCache` pre-warming (100% lock-free `TryGetValue` cache hits on workers) + thread-safe `SightTracker`, `AvoidanceTracker`, `CoverPositionFinder`, `RegionFlooder`, and `CellFlooder`. |
-| **Combat Extended** | `CETeam.CombatExtended` | Safe main-thread routing for ballistic `ProjectileCE` trajectories and thread-safe `LightingTracker` synchronization. |
-| **Vehicle Framework** | `SmashPhil.VehicleFramework` | Safe main-thread routing for multi-cell `VehiclePawn` movement and collision grids. |
-| **Vanilla Expanded (`VEF`)** | `OskarPotocki.VanillaFactionsExpanded.Core` | Built-in concurrency guards for `Vanilla Psycasts Expanded`, `Vanilla Social Interactions Expanded`, `Vanilla Memes Expanded`, and `VEF` subsystems. |
+### 1. Core, Official DLCs & Frameworks
+| # | Mod / Expansion Name | Package ID | Status |
+| :---: | :--- | :--- | :--- |
+| 1 | **Harmony** | `brrainz.harmony` | Required Dependency |
+| 2 | **RimWorld Core (1.3 – 1.7)** | `Ludeon.RimWorld` | Verified (30k Ticks) |
+| 3 | **RimWorld - Royalty** | `Ludeon.RimWorld.Royalty` | Verified (30k Ticks) |
+| 4 | **RimWorld - Ideology** | `Ludeon.RimWorld.Ideology` | Verified (30k Ticks) |
+| 5 | **RimWorld - Biotech** | `Ludeon.RimWorld.Biotech` | Verified (30k Ticks) |
+| 6 | **RimWorld - Anomaly** | `Ludeon.RimWorld.Anomaly` | Verified (30k Ticks) |
+| 7 | **RimWorld - Odyssey** | `Ludeon.RimWorld.Odyssey` | Verified (30k Ticks) |
+| 8 | **Prepatcher** | `zetrith.prepatcher` | Verified (30k Ticks) |
+| 9 | **HugsLib** | `UnlimitedHugs.HugsLib` | Verified (30k Ticks) |
+| 10 | **Vanilla Expanded Framework (VEF)** | `OskarPotocki.VanillaFactionsExpanded.Core` | Verified (30k Ticks) |
+| 11 | **Vehicle Framework** | `SmashPhil.VehicleFramework` | Verified (30k Ticks) |
+| 12 | **Humanoid Alien Races (HAR)** | `erdelf.HumanoidAlienRaces` | Built-in Profile (`About.xml`) |
 
-- **Performance & AI:** *Performance Optimizer*, *Performance Fish*, *Dubs Performance Analyzer*, *Search and Destroy*, *Achtung!*, *Defensive Positions*.
-- **Combat & Gear:** *RunAndGun*, *Simple Sidearms*, *Yayo's Combat 3*, *Gunplay*, *Dual Wield*, *Giddy-up! 2*.
-- **Hauling, Work & AI Jobs:** *Pick Up And Haul*, *While You're Up*, *CommonSense*, *Smart Medicine*, *Allow Tool*, *Share The Load*, *QualityBuilder*, *Replace Stuff*.
-- **Colony & Immersion:** *Dubs Bad Hygiene*, *Hospitality*, *Zoology Mod*, *SpeakUp*, *Interaction Bubbles*, *Wall Light*, *Deep Storage (LWM)*, *RimHUD*, *Numbers*, *Camera+*.
+### 2. Performance, Engine & AI Overhauls
+| # | Mod Name | Package ID | Status |
+| :---: | :--- | :--- | :--- |
+| 13 | **RocketMan / Missile Girl** | `vr.missilegirl` | Verified (30k Ticks) |
+| 14 | **CAI-5000 - Advanced AI + Fog Of War** | `Krkr.rule56` | Verified (30k Ticks) |
+| 15 | **TicksPerSecond (TPS 1.6)** | `Defi.tickspersecond.RW` | Verified (30k Ticks) |
+| 16 | **Fishery** | `bs.fishery` | Built-in Profile (`About.xml`) |
+| 17 | **Performance Fish** | `bs.performance` | Built-in Profile (`About.xml`) |
+| 18 | **Performance Optimizer** | `Taranchuk.PerformanceOptimizer` | Built-in Profile (`About.xml`) |
+| 19 | **Dubs Performance Analyzer** | `dubwise.dubsperformanceanalyzer` | Built-in Profile (`About.xml`) |
+
+### 3. Combat, Vehicles & Tactical Mods
+| # | Mod Name | Package ID | Status |
+| :---: | :--- | :--- | :--- |
+| 20 | **Combat Extended (CE)** | `CETeam.CombatExtended` | Verified (30k Ticks) |
+| 21 | **RunAndGun - Continued** | `MemeGoddess.RunAndGun` / `roolo.runandgun` | Verified (30k Ticks) |
+| 22 | **Vanilla Vehicles Expanded** | `OskarPotocki.VanillaVehiclesExpanded` | Verified (30k Ticks) |
+| 23 | **Vanilla Vehicles Expanded - Tier 3** | `OskarPotocki.VanillaVehiclesExpandedTier3` | Verified (30k Ticks) |
+| 24 | **Vanilla Vehicles Expanded - Upgrades** | `OskarPotocki.VanillaVehiclesExpandedUpgrades` | Verified (30k Ticks) |
+| 25 | **Trauma Team Complete** | `EdelweissPirate.traumateamcomplete` | Verified (30k Ticks) |
+| 26 | **Integrated Implants** | `lts.I` | Verified (30k Ticks) |
+| 27 | **Simple Sidearms** | `PeteTimesSix.SimpleSidearms` | Built-in Profile (`About.xml`) |
+
+### 4. Vanilla Expanded Suite
+| # | Mod Name | Package ID | Status |
+| :---: | :--- | :--- | :--- |
+| 28 | **Vanilla Psycasts Expanded (VPE)** | `VanillaExpanded.VPsycastsE` / `VanillaExpanded.VPE` | Verified (30k Ticks) |
+| 29 | **Myf's Vanilla Psycast Expanded Tweaks** | `Myf.VPE.Tweaks` | Verified (30k Ticks) |
+| 30 | **Vanilla Social Interactions Expanded** | `VanillaExpanded.VanillaSocialInteractionsExpanded` | Verified (30k Ticks) |
+| 31 | **Vanilla Ideology Expanded - Memes & Structures** | `VanillaExpanded.VMemesE` / `VanillaExpanded.VME` | Verified (30k Ticks) |
+| 32 | **Vanilla Factions Expanded - Empire** | `OskarPotocki.VFE.Empire` | Verified (30k Ticks) |
+| 33 | **Vanilla Factions Expanded - Deserters** | `OskarPotocki.VFE.Deserters` | Verified (30k Ticks) |
+| 34 | **Vanilla Factions Expanded - Insectoids 2** | `OskarPotocki.VFE.Insectoid2` | Verified (30k Ticks) |
+| 35 | **Vanilla Quests Expanded - The Generator** | `vanillaquestsexpanded.generator` | Verified (30k Ticks) |
+| 36 | **Vanilla Quests Expanded - Cryptoforge** | `vanillaquestsexpanded.cryptoforge` | Verified (30k Ticks) |
+| 37 | **Vanilla Quests Expanded - Ancients** | `vanillaquestsexpanded.ancients` | Verified (30k Ticks) |
+| 38 | **Vanilla Animals Expanded** | `VanillaExpanded.VanillaAnimalsExpanded` | Verified (30k Ticks) |
+| 39 | **Vanilla Temperature Expanded** | `VanillaExpanded.Temperature` | Verified (30k Ticks) |
+| 40 | **Vanilla Landmarks Expanded** | `VanillaExpanded.VExplorationE` | Verified (30k Ticks) |
+| 41 | **Vanilla Textures Expanded** | `VanillaExpanded.VTEXE` | Verified (30k Ticks) |
+
+### 5. Colony AI, Jobs, Immersion & QoL Mods
+| # | Mod Name | Package ID | Status |
+| :---: | :--- | :--- | :--- |
+| 42 | **Common Sense** | `avilmask.CommonSense` | Verified (30k Ticks) |
+| 43 | **Zoology: Realistic Animal Overhaul** | `com.abobashark.zoologymod` | Verified (30k Ticks) |
+| 44 | **Tweaks Galore** | `Neronix17.TweaksGalore` | Verified (30k Ticks) |
+| 45 | **Progression: Education** | `ferny.ProgressionEducation` | Verified (30k Ticks) |
+| 46 | **Resource Delivery Helper** | `ferny.ResourceDeliveryHelper` | Verified (30k Ticks) |
+| 47 | **Prisoner Realism** | `Legator.PrisonerRealism` | Verified (30k Ticks) |
+| 48 | **Helicopter Parenting** | `CheaterEater.HelicopterParenting` | Verified (30k Ticks) |
+| 49 | **Call A Trader** | `arakos.callatrader.acat` | Verified (30k Ticks) |
+| 50 | **Distant Monolith** | `Haecriver.DistantMonolith` | Verified (30k Ticks) |
+| 51 | **Dynamic Map Size** | `Bluur.DynamicMapSize` | Verified (30k Ticks) |
+| 52 | **More Useful Materials** | `CN.MoreUsefulMaterials` | Verified (30k Ticks) |
+| 53 | **Leo - Events** | `Leo.EventsExpanded` | Verified (30k Ticks) |
+| 54 | **[Og] Immersive Filter** | `Og.Immersive.Filter` | Verified (30k Ticks) |
+| 55 | **Nice Plants Menu** | `Andromeda.NicePlantsMenu` | Verified (30k Ticks) |
+| 56 | **Readable Numbers** | `7h0m4s.RimworldReadableNumbers` | Verified (30k Ticks) |
+| 57 | **SimpleCameraSetting** | `ray1203.SimpleCameraSetting` | Verified (30k Ticks) |
+| 58 | **Corpse Description Fix** | `ferny.CorpseDescriptionFix` | Verified (30k Ticks) |
+| 59 | **EdB Prepare Carefully** | `EdB.PrepareCarefully` | Verified (30k Ticks) |
+| 60 | **Hard Times: Hair and Beards** | `BotchJob.HTHair` | Verified (30k Ticks) |
+| 61 | **Won hair_men** | `won.hair` | Verified (30k Ticks) |
+| 62 | **Won Hair Men Retextured** | `Neronix17.Retexture.WonHairMen` | Verified (30k Ticks) |
+| 63 | **Pick Up And Haul** | `Mehni.PickUpAndHaul` | Built-in Profile (`About.xml`) |
+| 64 | **Smart Medicine** | `Uuugggg.SmartMedicine` | Built-in Profile (`About.xml`) |
+| 65 | **Allow Tool** | `UnlimitedHugs.AllowTool` | Built-in Profile (`About.xml`) |
+| 66 | **Hospitality** | `Orion.Hospitality` | Built-in Profile (`About.xml`) |
+| 67 | **Dubs Bad Hygiene** | `Dubwise.DubsBadHygiene` | Built-in Profile (`About.xml`) |
+| 68 | **LWM's Deep Storage** | `LWM.DeepStorage` | Built-in Profile (`About.xml`) |
 
 </details>
 
