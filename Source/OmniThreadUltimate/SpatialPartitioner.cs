@@ -41,9 +41,16 @@ namespace OmniThreadUltimate
             RecycleBatches();
             MainThreadFallbackThings.Clear();
 
+            if (sourceList == null)
+            {
+                LastPartitionedThingCount = 0;
+                LastActiveSectorCount = 0;
+                mainThreadThings = MainThreadFallbackThings;
+                return ColorBatches;
+            }
+
             int count = sourceList.Count;
             LastPartitionedThingCount = count;
-            int maxPerSectorBatch = (OmniThreadMod.IterationLevel <= 2) ? 10 : ((OmniThreadMod.IterationLevel == 3) ? 6 : 4);
 
             for (int i = 0; i < count; i++)
             {
@@ -55,6 +62,13 @@ namespace OmniThreadUltimate
 
                 if (!thing.Spawned || thing.Map == null)
                 {
+                    MainThreadFallbackThings.Add(thing);
+                    continue;
+                }
+
+                if (ModCompatibilityManager.ShouldTickOnMainThread(thing, thing.GetType()))
+                {
+                    System.Threading.Interlocked.Increment(ref ModCompatibilityManager.MainThreadRoutedModThingTicks);
                     MainThreadFallbackThings.Add(thing);
                     continue;
                 }
@@ -71,12 +85,6 @@ namespace OmniThreadUltimate
                 {
                     batch = RentBatch(sectorKey, color);
                     ActiveSectorsByKey.Add(sectorKey, batch);
-                    ColorBatches[color].Add(batch);
-                }
-                else if (batch.Things.Count >= maxPerSectorBatch)
-                {
-                    batch = RentBatch(sectorKey, color);
-                    ActiveSectorsByKey[sectorKey] = batch;
                     ColorBatches[color].Add(batch);
                 }
                 batch.Things.Add(thing);

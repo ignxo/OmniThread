@@ -48,8 +48,12 @@ namespace OmniThreadUltimate
         public static readonly ConcurrentDictionary<int, long> ThreadWorkCounts = new ConcurrentDictionary<int, long>();
         public static readonly ConcurrentDictionary<int, int> ThreadTickWorkCounts = new ConcurrentDictionary<int, int>();
 
-        private static readonly long[] FastThreadWorkCounts = new long[16384];
-        private static readonly int[] FastThreadSeenStamp = new int[16384];
+        public const int MaxTrackedThreadId = 16384;
+        public const int CacheLineLongStride = 8;
+        public const int CacheLineIntStride = 16;
+
+        private static readonly long[] FastThreadWorkCounts = new long[MaxTrackedThreadId * CacheLineLongStride];
+        private static readonly int[] FastThreadSeenStamp = new int[MaxTrackedThreadId * CacheLineIntStride];
         private static int CurrentTickStamp = 1;
         private static int ActiveWorkersThisTick = 0;
 
@@ -106,13 +110,14 @@ namespace OmniThreadUltimate
         public static void RecordThreadWork()
         {
             int tid = Thread.CurrentThread.ManagedThreadId;
-            if ((uint)tid < 16384u)
+            if ((uint)tid < (uint)MaxTrackedThreadId)
             {
-                FastThreadWorkCounts[tid]++;
+                FastThreadWorkCounts[tid << 3]++;
                 int stamp = CurrentTickStamp;
-                if (FastThreadSeenStamp[tid] != stamp)
+                int stampIdx = tid << 4;
+                if (FastThreadSeenStamp[stampIdx] != stamp)
                 {
-                    FastThreadSeenStamp[tid] = stamp;
+                    FastThreadSeenStamp[stampIdx] = stamp;
                     Interlocked.Increment(ref ActiveWorkersThisTick);
                 }
             }
@@ -129,12 +134,12 @@ namespace OmniThreadUltimate
         public static void SyncThreadWorkDictionary()
         {
             ThreadWorkCounts.Clear();
-            for (int i = 0; i < FastThreadWorkCounts.Length; i++)
+            for (int tid = 0; tid < MaxTrackedThreadId; tid++)
             {
-                long count = FastThreadWorkCounts[i];
+                long count = FastThreadWorkCounts[tid << 3];
                 if (count > 0)
                 {
-                    ThreadWorkCounts[i] = count;
+                    ThreadWorkCounts[tid] = count;
                 }
             }
         }
@@ -321,35 +326,91 @@ namespace OmniThreadUltimate
             MainThreadSyncQueue.Flush();
         }
 
+        private static readonly List<Thing> Iter1ParallelBuffer = new List<Thing>(1024);
+        private static readonly List<Thing> Iter1MainThreadBuffer = new List<Thing>(128);
+
         private static void ExecuteIteration1NaiveParallel(List<Thing> currentBucket, ParallelOptions parallelOptions)
         {
-            int count = currentBucket.Count;
-            MainThreadSyncQueue.InParallelSection = true;
-            try
+            if (currentBucket == null)
             {
-                Parallel.For(0, count, parallelOptions, delegate(int idx)
+                return;
+            }
+            Iter1ParallelBuffer.Clear();
+            Iter1MainThreadBuffer.Clear();
+            int count = currentBucket.Count;
+            for (int i = 0; i < count; i++)
+            {
+                Thing thing = currentBucket[i];
+                if (thing == null || thing.Destroyed)
                 {
-                    Thing thing = currentBucket[idx];
-                    if (thing == null || thing.Destroyed)
+                    continue;
+                }
+                if (!thing.Spawned || thing.Map == null)
+                {
+                    Iter1MainThreadBuffer.Add(thing);
+                    continue;
+                }
+                if (ModCompatibilityManager.ShouldTickOnMainThread(thing, thing.GetType()))
+                {
+                    Interlocked.Increment(ref ModCompatibilityManager.MainThreadRoutedModThingTicks);
+                    Iter1MainThreadBuffer.Add(thing);
+                    continue;
+                }
+                Iter1ParallelBuffer.Add(thing);
+            }
+
+            int parallelCount = Iter1ParallelBuffer.Count;
+            if (parallelCount > 0)
+            {
+                MainThreadSyncQueue.InParallelSection = true;
+                try
+                {
+                    Parallel.For(0, parallelCount, parallelOptions, delegate(int idx)
                     {
-                        return;
-                    }
+                        Thing thing = Iter1ParallelBuffer[idx];
+                        if (thing == null || thing.Destroyed)
+                        {
+                            return;
+                        }
+                        try
+                        {
+                            RecordThreadWork();
+                            Interlocked.Increment(ref TotalParallelThingTicks);
+                            thing.DoTick();
+                        }
+                        catch (Exception ex)
+                        {
+                            if (!ModCompatibilityManager.HandleWorkerThingException(thing, "Iter1Naive.DoTick", ex))
+                            {
+                                MainThreadSyncQueue.RecordWorkerException("Iter1Naive.DoTick(" + thing.ToStringSafe() + ")", ex);
+                            }
+                        }
+                    });
+                }
+                finally
+                {
+                    MainThreadSyncQueue.InParallelSection = false;
+                }
+            }
+
+            int mtCount = Iter1MainThreadBuffer.Count;
+            for (int m = 0; m < mtCount; m++)
+            {
+                Thing mtThing = Iter1MainThreadBuffer[m];
+                if (mtThing != null && !mtThing.Destroyed)
+                {
                     try
                     {
                         RecordThreadWork();
-                        Interlocked.Increment(ref TotalParallelThingTicks);
-                        thing.DoTick();
+                        mtThing.DoTick();
                     }
                     catch (Exception ex)
                     {
-                        MainThreadSyncQueue.RecordWorkerException("Iter1Naive.DoTick(" + thing.ToStringSafe() + ")", ex);
+                        MainThreadSyncQueue.RecordWorkerException("Iter1MainThreadFallback.DoTick(" + mtThing.ToStringSafe() + ")", ex);
                     }
-                });
+                }
             }
-            finally
-            {
-                MainThreadSyncQueue.InParallelSection = false;
-            }
+
             MainThreadSyncQueue.Flush();
         }
 
@@ -478,12 +539,13 @@ namespace OmniThreadUltimate
         private static void ExecuteIter5WorkerLoop(Thing[] workBuf, int workCount, int ticksGame, bool isNormalTick, int workerSlot)
         {
             int tid = Thread.CurrentThread.ManagedThreadId;
-            if ((uint)tid < 16384u)
+            if ((uint)tid < (uint)MaxTrackedThreadId)
             {
                 int stamp = CurrentTickStamp;
-                if (FastThreadSeenStamp[tid] != stamp)
+                int stampIdx = tid << 4;
+                if (FastThreadSeenStamp[stampIdx] != stamp)
                 {
-                    FastThreadSeenStamp[tid] = stamp;
+                    FastThreadSeenStamp[stampIdx] = stamp;
                     Interlocked.Increment(ref ActiveWorkersThisTick);
                 }
             }
@@ -518,9 +580,13 @@ namespace OmniThreadUltimate
                     try
                     {
                         Type tType = thing.GetType();
-                        if (ModCompatibilityManager.ShouldTickOnMainThread(thing, tType))
+                        bool modMainThread = ModCompatibilityManager.ShouldTickOnMainThread(thing, tType);
+                        if (modMainThread || !thing.Spawned || thing.Map == null)
                         {
-                            Interlocked.Increment(ref ModCompatibilityManager.MainThreadRoutedModThingTicks);
+                            if (modMainThread)
+                            {
+                                Interlocked.Increment(ref ModCompatibilityManager.MainThreadRoutedModThingTicks);
+                            }
                             int mtSlot = Interlocked.Increment(ref Iter5MainThreadCount) - 1;
                             Thing[] mtBuf = Iter5MainThreadBuffer;
                             if ((uint)mtSlot < (uint)mtBuf.Length)
@@ -532,7 +598,7 @@ namespace OmniThreadUltimate
                                 Thing mtThing = thing;
                                 MainThreadSyncQueue.Enqueue(delegate
                                 {
-                                    if (mtThing != null && !mtThing.Destroyed && mtThing.Spawned)
+                                    if (mtThing != null && !mtThing.Destroyed)
                                     {
                                         mtThing.DoTick();
                                     }
@@ -588,9 +654,9 @@ namespace OmniThreadUltimate
                 }
             }
 
-            if ((uint)tid < 16384u && localThingTicks > 0)
+            if ((uint)tid < (uint)MaxTrackedThreadId && localThingTicks > 0)
             {
-                Interlocked.Add(ref FastThreadWorkCounts[tid], localThingTicks);
+                Interlocked.Add(ref FastThreadWorkCounts[tid << 3], localThingTicks);
             }
             if (localThingTicks > 0)
             {
@@ -771,7 +837,7 @@ namespace OmniThreadUltimate
                 {
                     Thing mtThing = mtBuf[m];
                     mtBuf[m] = null;
-                    if (mtThing != null && !mtThing.Destroyed && mtThing.Spawned)
+                    if (mtThing != null && !mtThing.Destroyed)
                     {
                         try
                         {
@@ -855,12 +921,11 @@ namespace OmniThreadUltimate
 
         private static List<Thing> GetBucket(List<List<Thing>> thingLists, Thing t, int interval)
         {
-            int num = t.GetHashCode();
-            if (num < 0)
+            if (interval <= 1)
             {
-                num *= -1;
+                return thingLists[0];
             }
-            int index = num % interval;
+            int index = (t.GetHashCode() & 0x7FFFFFFF) % interval;
             return thingLists[index];
         }
 

@@ -33,6 +33,20 @@ namespace OmniThreadUltimate
         public static int SpawnedRaidersCount = 0;
         public static int ShutdownDelayFrames = 0;
 
+        public static bool SimulatePlayerMode = true;
+        public static int SimulatedCameraMoves = 0;
+        public static int SimulatedSelectionsAndTabs = 0;
+        public static int SimulatedDraftOrders = 0;
+        public static int SimulatedDesignations = 0;
+        public static int SimulatedBlueprints = 0;
+        public static int SimulatedWorkScheduleEdits = 0;
+        public static int SimulatedStorytellerIncidents = 0;
+        public static int SimulatedPlayerActionExceptions = 0;
+
+        private static readonly List<Pawn> DraftedByTest = new List<Pawn>(16);
+        private static readonly List<Thing> BlueprintsByTest = new List<Thing>(32);
+        private static Zone_Stockpile TestStockpileZone = null;
+
         private static readonly List<float> TickDurationsMs = new List<float>(TargetBenchmarkTicks + 64);
         private static readonly List<float> TickListDurationsMs = new List<float>(TargetBenchmarkTicks + 64);
         private static readonly List<int> TickActiveThreadCounts = new List<int>(TargetBenchmarkTicks + 64);
@@ -144,7 +158,14 @@ namespace OmniThreadUltimate
                     {
                         Current.Game.Info.permadeathMode = false;
                     }
-                    Log.Message("[OmniThread Ultimate] AutoTest: Calling Environment.Exit(0)...");
+                    Log.Message("[OmniThread Ultimate] AutoTest: Calling Process.GetCurrentProcess().Kill()...");
+                    try
+                    {
+                        Process.GetCurrentProcess().Kill();
+                    }
+                    catch
+                    {
+                    }
                     Environment.Exit(0);
                 }
                 return;
@@ -155,18 +176,36 @@ namespace OmniThreadUltimate
                 return;
             }
 
+            if (Current.Game != null && Current.Game.Info != null && Current.Game.Info.permadeathMode)
+            {
+                Current.Game.Info.permadeathMode = false;
+            }
+
+            if (IsMeasuring && SimulatePlayerMode)
+            {
+                SimulatePlayerOnFrame(Find.CurrentMap);
+            }
+
             if (HeartbeatStopwatch.ElapsedMilliseconds >= 4000)
             {
                 HeartbeatStopwatch.Restart();
                 Log.Message(string.Format(CultureInfo.InvariantCulture,
-                    "[OmniThread Heartbeat] Frame={0} | RecordedTicks={1}/{2} | LastTick={3:F2} ms | RollingAvg={4:F2} ms | RoutedModTicks={5} | CaughtEx={6}",
+                    "[OmniThread Heartbeat] Frame={0} | RecordedTicks={1}/{2} | LastTick={3:F2} ms | RollingAvg={4:F2} ms | RoutedModTicks={5} | CaughtEx={6} | PlayerActions(Cam={7},Sel={8},Draft={9},Des={10},BP={11},Work={12},Inc={13},Ex={14})",
                     Time.frameCount,
                     RecordedTicks,
                     TargetBenchmarkTicks,
                     ParallelTickEngine.LastTickMs,
                     ParallelTickEngine.RollingAvgTickMs,
                     ModCompatibilityManager.MainThreadRoutedModThingTicks,
-                    MainThreadSyncQueue.CaughtConcurrencyExceptions));
+                    MainThreadSyncQueue.CaughtConcurrencyExceptions,
+                    SimulatedCameraMoves,
+                    SimulatedSelectionsAndTabs,
+                    SimulatedDraftOrders,
+                    SimulatedDesignations,
+                    SimulatedBlueprints,
+                    SimulatedWorkScheduleEdits,
+                    SimulatedStorytellerIncidents,
+                    SimulatedPlayerActionExceptions));
             }
 
             if (Find.TickManager.CurTimeSpeed != TimeSpeed.Ultrafast)
@@ -400,12 +439,17 @@ namespace OmniThreadUltimate
             TickListDurationsMs.Add(ParallelTickEngine.LastTickListMs);
             TickActiveThreadCounts.Add(activeWorkers);
 
+            if (SimulatePlayerMode && Find.CurrentMap != null)
+            {
+                SimulatePlayerOnTick(Find.CurrentMap, RecordedTicks);
+            }
+
             if (RecordedTicks % 200 == 0 || RecordedTicks == 1)
             {
                 double elapsedSec = WallClockStopwatch.Elapsed.TotalSeconds;
                 double currentWallTps = elapsedSec > 0.001 ? (RecordedTicks / elapsedSec) : 0.0;
                 Log.Message(string.Format(CultureInfo.InvariantCulture,
-                    "[OmniThread AutoTest] Progress: {0}/{1} ticks | LastTick={2:F3} ms (TickList={3:F3} ms) | RollingAvg={4:F3} ms | WallTPS={5:F1} | Workers={6} | SyncFlushed={7} | CaughtExceptions={8}",
+                    "[OmniThread AutoTest] Progress: {0}/{1} ticks | LastTick={2:F3} ms (TickList={3:F3} ms) | RollingAvg={4:F3} ms | WallTPS={5:F1} | Workers={6} | SyncFlushed={7} | CaughtExceptions={8} | Player(Cam={9},Sel={10},Draft={11},Des={12},BP={13},Work={14},Inc={15},Ex={16})",
                     RecordedTicks,
                     TargetBenchmarkTicks,
                     tickMs,
@@ -414,7 +458,15 @@ namespace OmniThreadUltimate
                     currentWallTps,
                     activeWorkers,
                     MainThreadSyncQueue.TotalFlushedActions,
-                    MainThreadSyncQueue.CaughtConcurrencyExceptions));
+                    MainThreadSyncQueue.CaughtConcurrencyExceptions,
+                    SimulatedCameraMoves,
+                    SimulatedSelectionsAndTabs,
+                    SimulatedDraftOrders,
+                    SimulatedDesignations,
+                    SimulatedBlueprints,
+                    SimulatedWorkScheduleEdits,
+                    SimulatedStorytellerIncidents,
+                    SimulatedPlayerActionExceptions));
             }
 
             if (RecordedTicks >= TargetBenchmarkTicks)
@@ -423,6 +475,325 @@ namespace OmniThreadUltimate
                 IsMeasuring = false;
                 BenchmarkFinished = true;
                 CompleteBenchmarkAndShutdown();
+            }
+        }
+
+        private static void SimulatePlayerOnFrame(Map map)
+        {
+            try
+            {
+                if (Find.WindowStack != null && Find.WindowStack.Windows != null)
+                {
+                    for (int i = Find.WindowStack.Windows.Count - 1; i >= 0; i--)
+                    {
+                        Window w = Find.WindowStack.Windows[i];
+                        if (w != null && w.forcePause)
+                        {
+                            w.Close(false);
+                        }
+                    }
+                }
+
+                int frame = Time.frameCount;
+
+                // 1. Camera panning across pawns, buildings, and map quadrants
+                if (frame % 12 == 0 && Find.CameraDriver != null)
+                {
+                    IReadOnlyList<Pawn> allPawns = map.mapPawns.AllPawnsSpawned;
+                    if (allPawns != null && allPawns.Count > 0)
+                    {
+                        Pawn targetPawn = allPawns[(frame / 12) % allPawns.Count];
+                        if (targetPawn != null && targetPawn.Spawned)
+                        {
+                            Find.CameraDriver.JumpToCurrentMapLoc(targetPawn.Position);
+                            SimulatedCameraMoves++;
+                        }
+                    }
+                    else
+                    {
+                        Find.CameraDriver.JumpToCurrentMapLoc(map.Center);
+                        SimulatedCameraMoves++;
+                    }
+                }
+
+                // 2. Selecting pawns/buildings/items and inspecting UI tabs
+                if (frame % 25 == 0 && Find.Selector != null)
+                {
+                    Find.Selector.ClearSelection();
+                    int mode = (frame / 25) % 3;
+                    if (mode == 0)
+                    {
+                        List<Pawn> colonists = map.mapPawns.FreeColonistsSpawned;
+                        if (colonists != null && colonists.Count > 0)
+                        {
+                            Pawn col = colonists[(frame / 25) % colonists.Count];
+                            if (col != null && col.Spawned)
+                            {
+                                Find.Selector.Select(col, false, true);
+                                SimulatedSelectionsAndTabs++;
+                            }
+                        }
+                    }
+                    else if (mode == 1)
+                    {
+                        IReadOnlyList<Pawn> allPawns = map.mapPawns.AllPawnsSpawned;
+                        if (allPawns != null && allPawns.Count > 0)
+                        {
+                            int count = Math.Min(3, allPawns.Count);
+                            for (int k = 0; k < count; k++)
+                            {
+                                Pawn p = allPawns[((frame / 25) + k) % allPawns.Count];
+                                if (p != null && p.Spawned)
+                                {
+                                    Find.Selector.Select(p, false, true);
+                                }
+                            }
+                            SimulatedSelectionsAndTabs++;
+                        }
+                    }
+                    else
+                    {
+                        List<Building> buildings = map.listerBuildings.allBuildingsColonist;
+                        if (buildings != null && buildings.Count > 0)
+                        {
+                            Building b = buildings[(frame / 25) % buildings.Count];
+                            if (b != null && b.Spawned)
+                            {
+                                Find.Selector.Select(b, false, true);
+                                SimulatedSelectionsAndTabs++;
+                            }
+                        }
+                    }
+                }
+
+                // 3. Cycling main UI tabs briefly like a player checking Work / Assign / Wildlife / Quests
+                if (frame % 90 == 0 && Find.MainTabsRoot != null)
+                {
+                    int tabSlot = (frame / 90) % 6;
+                    if (tabSlot == 0)
+                    {
+                        MainButtonDef workTab = DefDatabase<MainButtonDef>.GetNamedSilentFail("Work");
+                        if (workTab != null)
+                        {
+                            Find.MainTabsRoot.SetCurrentTab(workTab, false);
+                            SimulatedSelectionsAndTabs++;
+                        }
+                    }
+                    else if (tabSlot == 1)
+                    {
+                        MainButtonDef assignTab = DefDatabase<MainButtonDef>.GetNamedSilentFail("Assign");
+                        if (assignTab != null)
+                        {
+                            Find.MainTabsRoot.SetCurrentTab(assignTab, false);
+                            SimulatedSelectionsAndTabs++;
+                        }
+                    }
+                    else if (tabSlot == 2 && MainButtonDefOf.Quests != null)
+                    {
+                        Find.MainTabsRoot.SetCurrentTab(MainButtonDefOf.Quests, false);
+                        SimulatedSelectionsAndTabs++;
+                    }
+                    else
+                    {
+                        Find.MainTabsRoot.EscapeCurrentTab(false);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SimulatedPlayerActionExceptions++;
+                Log.Warning("[OmniThread PlayerSim] Frame action exception: " + ex);
+            }
+        }
+
+        private static void SimulatePlayerOnTick(Map map, int tick)
+        {
+            try
+            {
+                // 1. Draft / Undraft colonists & issue player Goto / Wait_Combat orders
+                if (tick % 150 == 0)
+                {
+                    for (int i = DraftedByTest.Count - 1; i >= 0; i--)
+                    {
+                        Pawn oldDrafted = DraftedByTest[i];
+                        if (oldDrafted != null && oldDrafted.Spawned && !oldDrafted.Dead && oldDrafted.drafter != null)
+                        {
+                            oldDrafted.drafter.Drafted = false;
+                            SimulatedDraftOrders++;
+                        }
+                    }
+                    DraftedByTest.Clear();
+
+                    List<Pawn> colonists = map.mapPawns.FreeColonistsSpawned;
+                    if (colonists != null && colonists.Count > 0)
+                    {
+                        Pawn col = colonists[(tick / 150) % colonists.Count];
+                        if (col != null && col.Spawned && !col.Dead && !col.Downed && !col.InMentalState && col.drafter != null && col.jobs != null)
+                        {
+                            col.drafter.Drafted = true;
+                            DraftedByTest.Add(col);
+                            IntVec3 moveCell = FindWalkableCellNear(map, col.Position, 12, tick);
+                            if (moveCell.IsValid && moveCell != col.Position && col.CanReach(moveCell, PathEndMode.OnCell, Danger.Deadly))
+                            {
+                                Job gotoJob = JobMaker.MakeJob(JobDefOf.Goto, moveCell);
+                                col.jobs.TryTakeOrderedJob(gotoJob, JobTag.Misc);
+                            }
+                            SimulatedDraftOrders++;
+                        }
+                    }
+                }
+
+                // 2. Player Designations (CutPlant, HarvestPlant, Haul, Mine, Hunt)
+                if (tick % 200 == 0 && map.designationManager != null)
+                {
+                    List<Thing> plants = map.listerThings.ThingsInGroup(ThingRequestGroup.Plant);
+                    if (plants != null && plants.Count > 0)
+                    {
+                        Thing plant = plants[(tick / 200) % plants.Count];
+                        if (plant != null && plant.Spawned && map.designationManager.DesignationOn(plant) == null)
+                        {
+                            map.designationManager.AddDesignation(new Designation(plant, DesignationDefOf.CutPlant));
+                            SimulatedDesignations++;
+                        }
+                    }
+
+                    List<Thing> haulables = map.listerThings.ThingsInGroup(ThingRequestGroup.HaulableAlways);
+                    if (haulables != null && haulables.Count > 0)
+                    {
+                        Thing item = haulables[(tick / 200) % haulables.Count];
+                        if (item != null && item.Spawned && map.designationManager.DesignationOn(item) == null)
+                        {
+                            map.designationManager.AddDesignation(new Designation(item, DesignationDefOf.Haul));
+                            SimulatedDesignations++;
+                        }
+                    }
+                }
+
+                // 3. Construction Blueprints & Stockpile Zones
+                if (tick % 300 == 0)
+                {
+                    for (int i = BlueprintsByTest.Count - 1; i >= 0; i--)
+                    {
+                        Thing oldBp = BlueprintsByTest[i];
+                        if (oldBp != null && !oldBp.Destroyed && oldBp.Spawned)
+                        {
+                            oldBp.Destroy(DestroyMode.Cancel);
+                            SimulatedBlueprints++;
+                        }
+                    }
+                    BlueprintsByTest.Clear();
+
+                    IntVec3 anchor = map.Center;
+                    List<Pawn> colonists = map.mapPawns.FreeColonistsSpawned;
+                    if (colonists != null && colonists.Count > 0)
+                    {
+                        anchor = colonists[0].Position;
+                    }
+                    IntVec3 buildCell = FindWalkableCellNear(map, anchor, 18, tick + 77);
+                    if (buildCell.IsValid && buildCell.InBounds(map) && buildCell.GetFirstBuilding(map) == null)
+                    {
+                        AcceptanceReport report = GenConstruct.CanPlaceBlueprintAt(ThingDefOf.Wall, buildCell, Rot4.North, map, false, null, null, ThingDefOf.WoodLog);
+                        if (report.Accepted)
+                        {
+                            Blueprint_Build bp = GenConstruct.PlaceBlueprintForBuild(ThingDefOf.Wall, buildCell, map, Rot4.North, Faction.OfPlayer, ThingDefOf.WoodLog);
+                            if (bp != null)
+                            {
+                                BlueprintsByTest.Add(bp);
+                                SimulatedBlueprints++;
+                            }
+                        }
+                    }
+
+                    if (TestStockpileZone == null && map.zoneManager != null)
+                    {
+                        IntVec3 zCell = FindWalkableCellNear(map, anchor, 16, tick + 99);
+                        if (zCell.InBounds(map) && map.zoneManager.ZoneAt(zCell) == null)
+                        {
+                            TestStockpileZone = new Zone_Stockpile(StorageSettingsPreset.DefaultStockpile, map.zoneManager);
+                            map.zoneManager.RegisterZone(TestStockpileZone);
+                            TestStockpileZone.AddCell(zCell);
+                            SimulatedBlueprints++;
+                        }
+                    }
+                    else if (TestStockpileZone != null)
+                    {
+                        TestStockpileZone.Delete();
+                        TestStockpileZone = null;
+                        SimulatedBlueprints++;
+                    }
+                }
+
+                // 4. Work Priorities & Schedule Changes
+                if (tick % 350 == 0)
+                {
+                    List<Pawn> colonists = map.mapPawns.FreeColonistsSpawned;
+                    if (colonists != null && colonists.Count > 0)
+                    {
+                        Pawn col = colonists[(tick / 350) % colonists.Count];
+                        if (col != null && col.workSettings != null && col.workSettings.EverWork)
+                        {
+                            List<WorkTypeDef> allWork = DefDatabase<WorkTypeDef>.AllDefsListForReading;
+                            if (allWork != null && allWork.Count > 0)
+                            {
+                                WorkTypeDef wDef = allWork[(tick / 350) % allWork.Count];
+                                if (wDef != null && !col.WorkTypeIsDisabled(wDef))
+                                {
+                                    int curPrio = col.workSettings.GetPriority(wDef);
+                                    int nextPrio = (curPrio <= 1) ? 3 : (curPrio - 1);
+                                    col.workSettings.SetPriority(wDef, nextPrio);
+                                    SimulatedWorkScheduleEdits++;
+                                }
+                            }
+                        }
+                        if (col != null && col.timetable != null)
+                        {
+                            int hour = (tick / 350) % 24;
+                            TimeAssignmentDef curAssign = col.timetable.GetAssignment(hour);
+                            TimeAssignmentDef nextAssign = (curAssign == TimeAssignmentDefOf.Work) ? TimeAssignmentDefOf.Anything : TimeAssignmentDefOf.Work;
+                            col.timetable.SetAssignment(hour, nextAssign);
+                            SimulatedWorkScheduleEdits++;
+                        }
+                    }
+                }
+
+                // 5. Storyteller Incidents / Commands (Raids, Traders, Drop Pods, Weather)
+                if (tick % 2500 == 0 && tick < TargetBenchmarkTicks - 500)
+                {
+                    int incType = (tick / 2500) % 4;
+                    IncidentDef incDef = null;
+                    if (incType == 0)
+                    {
+                        incDef = IncidentDefOf.TraderCaravanArrival;
+                    }
+                    else if (incType == 1)
+                    {
+                        incDef = DefDatabase<IncidentDef>.GetNamedSilentFail("ResourcePodCrash") ?? IncidentDefOf.OrbitalTraderArrival;
+                    }
+                    else if (incType == 2)
+                    {
+                        incDef = IncidentDefOf.RaidEnemy;
+                    }
+                    else
+                    {
+                        incDef = IncidentDefOf.OrbitalTraderArrival;
+                    }
+
+                    if (incDef != null && incDef.Worker != null)
+                    {
+                        IncidentParms parms = StorytellerUtility.DefaultParmsNow(incDef.category, map);
+                        if (incDef == IncidentDefOf.RaidEnemy)
+                        {
+                            parms.points = Math.Min(parms.points, 800f);
+                        }
+                        incDef.Worker.TryExecute(parms);
+                        SimulatedStorytellerIncidents++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SimulatedPlayerActionExceptions++;
+                Log.Warning("[OmniThread PlayerSim] Tick action exception at tick " + tick + ": " + ex);
             }
         }
 
@@ -546,6 +917,14 @@ namespace OmniThreadUltimate
             sb.AppendFormat(CultureInfo.InvariantCulture, "  \"appliedModCompatPatches\": {0},\n", ModCompatibilityManager.AppliedModCompatPatchesCount);
             sb.AppendFormat(CultureInfo.InvariantCulture, "  \"autoSafeModFallbacks\": {0},\n", ModCompatibilityManager.AutoSafeModFallbackTypesCount);
             sb.AppendFormat(CultureInfo.InvariantCulture, "  \"mainThreadRoutedModThingTicks\": {0},\n", ModCompatibilityManager.MainThreadRoutedModThingTicks);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"simulatedCameraMoves\": {0},\n", SimulatedCameraMoves);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"simulatedSelectionsAndTabs\": {0},\n", SimulatedSelectionsAndTabs);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"simulatedDraftOrders\": {0},\n", SimulatedDraftOrders);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"simulatedDesignations\": {0},\n", SimulatedDesignations);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"simulatedBlueprintsAndZones\": {0},\n", SimulatedBlueprints);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"simulatedWorkScheduleEdits\": {0},\n", SimulatedWorkScheduleEdits);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"simulatedStorytellerIncidents\": {0},\n", SimulatedStorytellerIncidents);
+            sb.AppendFormat(CultureInfo.InvariantCulture, "  \"simulatedPlayerActionExceptions\": {0},\n", SimulatedPlayerActionExceptions);
             sb.AppendLine("  \"workerThreadBreakdown\": {");
 
             int tIdx = 0;

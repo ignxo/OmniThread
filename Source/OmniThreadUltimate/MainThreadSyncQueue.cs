@@ -253,7 +253,8 @@ namespace OmniThreadUltimate
             if (!string.IsNullOrEmpty(text) &&
                 (text.IndexOf("OmniThread loop guard:", StringComparison.Ordinal) >= 0 ||
                  text.IndexOf("Can't start LayDown toil", StringComparison.Ordinal) >= 0 ||
-                 text.IndexOf("Could not resolve symbol", StringComparison.Ordinal) >= 0))
+                 text.IndexOf("Could not resolve symbol", StringComparison.Ordinal) >= 0 ||
+                 text.IndexOf("but yielded no actual job for pawn", StringComparison.Ordinal) >= 0))
             {
                 return;
             }
@@ -578,7 +579,7 @@ namespace OmniThreadUltimate
         }
     }
 
-    [HarmonyPatch(typeof(Thing), "DeSpawn")]
+    [HarmonyPatch]
     public static class Patch_Thing_DeSpawn
     {
         [ThreadStatic]
@@ -587,6 +588,37 @@ namespace OmniThreadUltimate
         private static int tsLastDeSpawnedStamp;
         [ThreadStatic]
         private static int tsLastDeSpawnedCount;
+
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            Type thingType = typeof(Thing);
+            Type[] paramTypes = new Type[] { typeof(DestroyMode) };
+            Type[] types;
+            try
+            {
+                types = thingType.Assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                types = ex.Types;
+            }
+            if (types == null)
+            {
+                yield break;
+            }
+            for (int i = 0; i < types.Length; i++)
+            {
+                Type t = types[i];
+                if (t != null && !t.IsGenericType && thingType.IsAssignableFrom(t))
+                {
+                    MethodInfo m = t.GetMethod("DeSpawn", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly, null, paramTypes, null);
+                    if (m != null && !m.IsAbstract && !m.IsGenericMethod)
+                    {
+                        yield return m;
+                    }
+                }
+            }
+        }
 
         public static bool Prefix(Thing __instance, DestroyMode mode)
         {
@@ -597,6 +629,10 @@ namespace OmniThreadUltimate
             if (__instance == null || !__instance.Spawned)
             {
                 return false;
+            }
+            if (__instance.holdingOwner != null && __instance.Map != null && ReferenceEquals(__instance.holdingOwner, __instance.Map.spawnedThings))
+            {
+                __instance.holdingOwner = null;
             }
             int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
             if (tsLastDeSpawnedStamp == stamp && ReferenceEquals(tsLastDeSpawnedThing, __instance))
@@ -627,13 +663,44 @@ namespace OmniThreadUltimate
         }
     }
 
-    [HarmonyPatch(typeof(Thing), "Destroy")]
+    [HarmonyPatch]
     public static class Patch_Thing_Destroy
     {
         [ThreadStatic]
         private static Thing tsLastDestroyedThing;
         [ThreadStatic]
         private static int tsLastDestroyedStamp;
+
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            Type thingType = typeof(Thing);
+            Type[] paramTypes = new Type[] { typeof(DestroyMode) };
+            Type[] types;
+            try
+            {
+                types = thingType.Assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                types = ex.Types;
+            }
+            if (types == null)
+            {
+                yield break;
+            }
+            for (int i = 0; i < types.Length; i++)
+            {
+                Type t = types[i];
+                if (t != null && !t.IsGenericType && thingType.IsAssignableFrom(t))
+                {
+                    MethodInfo m = t.GetMethod("Destroy", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly, null, paramTypes, null);
+                    if (m != null && !m.IsAbstract && !m.IsGenericMethod)
+                    {
+                        yield return m;
+                    }
+                }
+            }
+        }
 
         public static bool Prefix(Thing __instance, DestroyMode mode)
         {
@@ -687,6 +754,15 @@ namespace OmniThreadUltimate
 
         public static bool Prefix(Thing newThing, IntVec3 loc, Map map, Rot4 rot, WipeMode wipeMode, bool respawningAfterLoad, bool forbidLeavings, ref Thing __result)
         {
+            if (newThing is Skyfaller_FlyingPawn)
+            {
+                Skyfaller sf = (Skyfaller)newThing;
+                if (sf.innerContainer == null || sf.innerContainer.Count == 0)
+                {
+                    __result = null;
+                    return false;
+                }
+            }
             if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
                 return true;
@@ -1156,6 +1232,523 @@ namespace OmniThreadUltimate
                 if (pawnRef != null && pawnRef.Spawned)
                 {
                     pawnRef.Notify_Teleported(endJobRef, resetPosRef);
+                }
+            });
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(ForbidUtility), "SetForbiddenIfOutsideHomeArea")]
+    public static class Patch_ForbidUtility_SetForbiddenIfOutsideHomeArea
+    {
+        public static bool Prefix(Thing t)
+        {
+            if (t == null)
+            {
+                return false;
+            }
+            if ((OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection) || !t.Spawned || t.Map == null)
+            {
+                Thing thingRef = t;
+                MainThreadSyncQueue.Enqueue(delegate
+                {
+                    if (thingRef != null && thingRef.Spawned && thingRef.Map != null)
+                    {
+                        ForbidUtility.SetForbiddenIfOutsideHomeArea(thingRef);
+                    }
+                });
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(ThinkNode_JobGiver), "TryIssueJobPackage")]
+    public static class Patch_ThinkNode_JobGiver_TryIssueJobPackage
+    {
+        [ThreadStatic]
+        private static Pawn tsLastPawn;
+        [ThreadStatic]
+        private static ThinkNode_JobGiver tsLastIssuedJobGiver;
+        [ThreadStatic]
+        private static int tsLastStamp;
+        [ThreadStatic]
+        private static int tsIssuedJobsInTick;
+
+        public static bool Prefix(ThinkNode_JobGiver __instance, Pawn pawn, ref ThinkResult __result)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection || pawn == null)
+            {
+                return true;
+            }
+            int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+            if (tsLastStamp == stamp && ReferenceEquals(tsLastPawn, pawn))
+            {
+                if (ReferenceEquals(tsLastIssuedJobGiver, __instance) || tsIssuedJobsInTick >= 3)
+                {
+                    __result = ThinkResult.NoJob;
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public static void Postfix(ThinkNode_JobGiver __instance, Pawn pawn, ThinkResult __result)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection || pawn == null || __result.Job == null)
+            {
+                return;
+            }
+            int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
+            if (tsLastStamp == stamp && ReferenceEquals(tsLastPawn, pawn))
+            {
+                tsIssuedJobsInTick++;
+            }
+            else
+            {
+                tsLastStamp = stamp;
+                tsLastPawn = pawn;
+                tsIssuedJobsInTick = 1;
+            }
+            tsLastIssuedJobGiver = __instance;
+        }
+    }
+
+    public static class ThreadLocalGenAdjFast
+    {
+        [ThreadStatic]
+        private static List<IntVec3>[] tsLists;
+        [ThreadStatic]
+        private static int tsCursor;
+
+        public static List<IntVec3> NextList()
+        {
+            if (tsLists == null)
+            {
+                tsLists = new List<IntVec3>[8];
+                for (int i = 0; i < 8; i++)
+                {
+                    tsLists[i] = new List<IntVec3>(32);
+                }
+            }
+            List<IntVec3> list = tsLists[tsCursor];
+            tsCursor = (tsCursor + 1) & 7;
+            list.Clear();
+            return list;
+        }
+
+        public static List<IntVec3> AdjacentCells8WaySingle(IntVec3 root)
+        {
+            List<IntVec3> list = NextList();
+            for (int i = 0; i < 8; i++)
+            {
+                list.Add(root + GenAdj.AdjacentCells[i]);
+            }
+            return list;
+        }
+
+        public static List<IntVec3> AdjacentCells8WayRect(IntVec3 thingCenter, Rot4 thingRot, IntVec2 thingSize)
+        {
+            if (thingSize.x == 1 && thingSize.z == 1)
+            {
+                return AdjacentCells8WaySingle(thingCenter);
+            }
+            List<IntVec3> list = NextList();
+            GenAdj.AdjustForRotation(ref thingCenter, ref thingSize, thingRot);
+            int minX = thingCenter.x - (thingSize.x - 1) / 2 - 1;
+            int maxX = minX + thingSize.x + 1;
+            int minZ = thingCenter.z - (thingSize.z - 1) / 2 - 1;
+            int maxZ = minZ + thingSize.z + 1;
+            IntVec3 cur = new IntVec3(minX - 1, 0, minZ);
+            do
+            {
+                cur.x++;
+                list.Add(cur);
+            }
+            while (cur.x < maxX);
+            do
+            {
+                cur.z++;
+                list.Add(cur);
+            }
+            while (cur.z < maxZ);
+            do
+            {
+                cur.x--;
+                list.Add(cur);
+            }
+            while (cur.x > minX);
+            do
+            {
+                cur.z--;
+                list.Add(cur);
+            }
+            while (cur.z > minZ + 1);
+            return list;
+        }
+
+        public static List<IntVec3> AdjacentCellsCardinalSingle(IntVec3 root)
+        {
+            List<IntVec3> list = NextList();
+            for (int i = 0; i < 4; i++)
+            {
+                list.Add(root + GenAdj.CardinalDirections[i]);
+            }
+            return list;
+        }
+
+        public static List<IntVec3> AdjacentCellsCardinalRect(IntVec3 thingCenter, Rot4 thingRot, IntVec2 thingSize)
+        {
+            if (thingSize.x == 1 && thingSize.z == 1)
+            {
+                return AdjacentCellsCardinalSingle(thingCenter);
+            }
+            List<IntVec3> list = NextList();
+            GenAdj.AdjustForRotation(ref thingCenter, ref thingSize, thingRot);
+            int minX = thingCenter.x - (thingSize.x - 1) / 2 - 1;
+            int maxX = minX + thingSize.x + 1;
+            int minZ = thingCenter.z - (thingSize.z - 1) / 2 - 1;
+            int maxZ = minZ + thingSize.z + 1;
+            IntVec3 cur = new IntVec3(minX, 0, minZ);
+            do
+            {
+                cur.x++;
+                list.Add(cur);
+            }
+            while (cur.x < maxX - 1);
+            cur.x++;
+            do
+            {
+                cur.z++;
+                list.Add(cur);
+            }
+            while (cur.z < maxZ - 1);
+            cur.z++;
+            do
+            {
+                cur.x--;
+                list.Add(cur);
+            }
+            while (cur.x > minX + 1);
+            cur.x--;
+            do
+            {
+                cur.z--;
+                list.Add(cur);
+            }
+            while (cur.z > minZ + 1);
+            return list;
+        }
+    }
+
+    [HarmonyPatch(typeof(GenAdjFast), "AdjacentCells8Way", new Type[] { typeof(IntVec3) })]
+    public static class Patch_GenAdjFast_AdjacentCells8Way_IntVec3
+    {
+        public static bool Prefix(IntVec3 root, ref List<IntVec3> __result)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                __result = ThreadLocalGenAdjFast.AdjacentCells8WaySingle(root);
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(GenAdjFast), "AdjacentCells8Way", new Type[] { typeof(IntVec3), typeof(Rot4), typeof(IntVec2) })]
+    public static class Patch_GenAdjFast_AdjacentCells8Way_Rect
+    {
+        public static bool Prefix(IntVec3 thingCenter, Rot4 thingRot, IntVec2 thingSize, ref List<IntVec3> __result)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                __result = ThreadLocalGenAdjFast.AdjacentCells8WayRect(thingCenter, thingRot, thingSize);
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(GenAdjFast), "AdjacentCellsCardinal", new Type[] { typeof(IntVec3) })]
+    public static class Patch_GenAdjFast_AdjacentCellsCardinal_IntVec3
+    {
+        public static bool Prefix(IntVec3 root, ref List<IntVec3> __result)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                __result = ThreadLocalGenAdjFast.AdjacentCellsCardinalSingle(root);
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(GenAdjFast), "AdjacentCellsCardinal", new Type[] { typeof(IntVec3), typeof(Rot4), typeof(IntVec2) })]
+    public static class Patch_GenAdjFast_AdjacentCellsCardinal_Rect
+    {
+        public static bool Prefix(IntVec3 thingCenter, Rot4 thingRot, IntVec2 thingSize, ref List<IntVec3> __result)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                __result = ThreadLocalGenAdjFast.AdjacentCellsCardinalRect(thingCenter, thingRot, thingSize);
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(AutoSlaughterManager), "get_AnimalsToSlaughter")]
+    public static class Patch_AutoSlaughterManager_AnimalsToSlaughter
+    {
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Postfix(ref List<Pawn> __result)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __result != null)
+            {
+                __result = new List<Pawn>(__result);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    public static class Patch_AutoSlaughterManager_Notifications
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            string[] names = new string[]
+            {
+                "CanAutoSlaughterNow",
+                "Notify_PawnDespawned",
+                "Notify_PawnSpawned",
+                "Notify_PawnChangedFaction",
+                "Notify_ConfigChanged"
+            };
+            for (int i = 0; i < names.Length; i++)
+            {
+                MethodInfo m = AccessTools.Method(typeof(AutoSlaughterManager), names[i]);
+                if (m != null)
+                {
+                    yield return m;
+                }
+            }
+        }
+
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    public static class Patch_Projectile_Launch_8Arg
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            Type projType = typeof(Projectile);
+            Type[] paramTypes = new Type[]
+            {
+                typeof(Thing),
+                typeof(Vector3),
+                typeof(LocalTargetInfo),
+                typeof(LocalTargetInfo),
+                typeof(ProjectileHitFlags),
+                typeof(bool),
+                typeof(Thing),
+                typeof(ThingDef)
+            };
+            Type[] types;
+            try
+            {
+                types = projType.Assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                types = ex.Types;
+            }
+            if (types == null)
+            {
+                yield break;
+            }
+            for (int i = 0; i < types.Length; i++)
+            {
+                Type t = types[i];
+                if (t != null && !t.IsGenericType && projType.IsAssignableFrom(t))
+                {
+                    MethodInfo m = t.GetMethod("Launch", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly, null, paramTypes, null);
+                    if (m != null && !m.IsAbstract && !m.IsGenericMethod)
+                    {
+                        yield return m;
+                    }
+                }
+            }
+        }
+
+        public static bool Prefix(
+            Projectile __instance,
+            Thing launcher,
+            Vector3 origin,
+            LocalTargetInfo usedTarget,
+            LocalTargetInfo intendedTarget,
+            ProjectileHitFlags hitFlags,
+            bool preventFriendlyFire,
+            Thing equipment,
+            ThingDef targetCoverDef)
+        {
+            if (__instance == null || __instance.Destroyed)
+            {
+                return false;
+            }
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                if (!__instance.Spawned || __instance.Map == null)
+                {
+                    return false;
+                }
+                return true;
+            }
+            Projectile projRef = __instance;
+            Thing launcherRef = launcher;
+            Vector3 originRef = origin;
+            LocalTargetInfo usedTargetRef = usedTarget;
+            LocalTargetInfo intendedTargetRef = intendedTarget;
+            ProjectileHitFlags hitFlagsRef = hitFlags;
+            bool preventFFRef = preventFriendlyFire;
+            Thing equipRef = equipment;
+            ThingDef coverRef = targetCoverDef;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (projRef != null && !projRef.Destroyed && projRef.Spawned && projRef.Map != null)
+                {
+                    projRef.Launch(launcherRef, originRef, usedTargetRef, intendedTargetRef, hitFlagsRef, preventFFRef, equipRef, coverRef);
+                }
+            });
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(ThingOwner), "DoTick")]
+    public static class Patch_ThingOwner_DoTick
+    {
+        public static bool Prefix(ThingOwner __instance)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            if (__instance == null)
+            {
+                return false;
+            }
+            int count = __instance.Count;
+            if (count == 0)
+            {
+                return false;
+            }
+            bool hasNormalTicker = false;
+            for (int i = 0; i < count; i++)
+            {
+                Thing t = __instance[i];
+                if (t != null && t.def != null && t.def.tickerType == TickerType.Normal)
+                {
+                    hasNormalTicker = true;
+                    break;
+                }
+            }
+            if (!hasNormalTicker)
+            {
+                return false;
+            }
+            ThingOwner ownerRef = __instance;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (ownerRef != null && ownerRef.Count > 0)
+                {
+                    ownerRef.DoTick();
+                }
+            });
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(Pawn), "ExitMap")]
+    public static class Patch_Pawn_ExitMap
+    {
+        public static bool Prefix(Pawn __instance, bool allowedToJoinOrCreateCaravan, Rot4 exitDir)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            if (__instance == null || !__instance.Spawned)
+            {
+                return false;
+            }
+            if (__instance.jobs != null && __instance.jobs.curDriver != null)
+            {
+                __instance.jobs.curDriver.ended = true;
+            }
+            Pawn pawnRef = __instance;
+            bool allowedRef = allowedToJoinOrCreateCaravan;
+            Rot4 dirRef = exitDir;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (pawnRef != null && pawnRef.Spawned && !pawnRef.Destroyed)
+                {
+                    pawnRef.ExitMap(allowedRef, dirRef);
+                }
+            });
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(JobDriver_ExitMapFlying), "<MakeNewToils>b__2_0")]
+    public static class Patch_JobDriver_ExitMapFlying
+    {
+        private static readonly MethodInfo TargetMethodInfo = AccessTools.Method(typeof(JobDriver_ExitMapFlying), "<MakeNewToils>b__2_0");
+
+        public static bool Prefix(JobDriver_ExitMapFlying __instance)
+        {
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
+            {
+                return true;
+            }
+            if (__instance == null || __instance.pawn == null || !__instance.pawn.Spawned)
+            {
+                return false;
+            }
+            __instance.ended = true;
+            JobDriver_ExitMapFlying driverRef = __instance;
+            MainThreadSyncQueue.Enqueue(delegate
+            {
+                if (driverRef != null && driverRef.pawn != null && driverRef.pawn.Spawned && !driverRef.pawn.Destroyed && TargetMethodInfo != null)
+                {
+                    TargetMethodInfo.Invoke(driverRef, null);
                 }
             });
             return false;

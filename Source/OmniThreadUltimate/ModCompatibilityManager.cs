@@ -258,6 +258,15 @@ namespace OmniThreadUltimate
                 {
                     return true;
                 }
+                if (thingType == null)
+                {
+                    thingType = thing.GetType();
+                }
+            }
+
+            if (thingType == null)
+            {
+                return false;
             }
 
             if (thingType == typeof(Pawn) || thingType == typeof(Plant))
@@ -788,6 +797,25 @@ namespace OmniThreadUltimate
                 PatchAllOverloadsWithUnifiedLock(harmony, ceUpdateLoadoutType, "TryGiveJob", "CombatExtended: JobGiver_UpdateLoadout.TryGiveJob");
             }
 
+            PatchTypeMethodsWithUnifiedLock(harmony, "CombatExtended.Verb_LaunchProjectileCE", new string[]
+            {
+                "TryFindCEShootLineFromTo", "CanHitTargetFrom", "CanHitCellFromCellIgnoringRange",
+                "CanHitFromCellIgnoringRange", "AdjustShotHeight", "GetHighestCoverAndSmokeForTarget",
+                "get_ShotHeight", "TryStartCastOn", "VerbTickCE", "TryCastShot"
+            });
+            PatchTypeMethodsWithUnifiedLock(harmony, "CombatExtended.Verb_ShootCE", new string[]
+            {
+                "CanHitTargetFrom", "TryCastShot", "VerbTickCE"
+            });
+            PatchTypeMethodsWithUnifiedLock(harmony, "CombatExtended.CollisionVertical", new string[]
+            {
+                "CalculateHeightRange"
+            });
+            PatchTypeMethodsWithUnifiedLock(harmony, "CombatExtended.CE_Utility", new string[]
+            {
+                "GetBoundsFor", "IntersectionPoint", "MaxProjectileRange"
+            });
+
             // 3. Missile Girl / RocketMan 1.6 (vr.missilegirl - 3712928623) - Lock-Free Parallel Bypasses
             Type mgStatWorkerPatchType = FindModType("MissileGirl.Optimizations.StatWorker_Patch");
             if (mgStatWorkerPatchType != null)
@@ -1159,6 +1187,7 @@ namespace OmniThreadUltimate
             PatchTypeMethodsWithLeafLock(harmony, "VEF.Maps.VanillaExpandedFramework_Pawn_PathFollower_CostToMoveIntoCell", new string[] { "ModifySpeedFactorForPawn" });
             PatchTypeMethodsWithLeafLock(harmony, "VEF.MentalStates.VanillaExpandedFramework_Pawn_InteractionsTracker_TryInteractWith_Patch", new string[] { "TryGetCachedSpreadableComp" });
             PatchTypeMethodsWithUnifiedLock(harmony, "VEF.Pawns.PhasingPatches", new string[] { "CheckPhasing" });
+            PatchTypeMethodsWithUnifiedLock(harmony, "VEF.Pawns.WorkGiver_ConstructionSkill_DeliverResourcesToBlueprints", new string[] { "HasJobOnThing", "JobOnThing" });
             PatchTypeMethodsWithUnifiedLock(harmony, "VEF.Pawns.VanillaExpandedFramework_PregnancyUtility_PregnancyChanceForPartners_Patch", new string[] { "Postfix" });
             PatchTypeMethodsWithLeafLock(harmony, "VEF.Things.VanillaExpandedFramework_ThingStuffPair_Commonality_Patch", new string[] { "GetCachedExtension" });
             PatchMethodSkipInParallel(harmony, FindModType("VEF.Weathers.VanillaExpandedFramework_WeatherManager_CurWeatherPerceived_Patch"), "Postfix", "VEF: CurWeatherPerceived_Patch.Postfix (Skip Weather Letter Check in Parallel)");
