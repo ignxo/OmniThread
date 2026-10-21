@@ -43,8 +43,7 @@
   ```text
   RimWorld/Mods/OmniThreadUltimate/
   ├── About/ (About.xml, Manifest.xml, Preview.png)
-  ├── Assemblies/ (OmniThreadUltimate.dll)
-  └── LoadFolders.xml
+  └── Assemblies/ (OmniThreadUltimate.dll)
   ```
 
 </details>
