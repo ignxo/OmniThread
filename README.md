@@ -62,13 +62,13 @@
 
 ## ⚡ Verified Benchmarks
 
-Captured on **AMD Ryzen 5 5600 (6 Cores / 12 Threads)** inside live `RimWorldWin64.exe` combat colonies. Raw telemetry logs are located in [`Benchmarks/`](Benchmarks/).
+Captured on **AMD Ryzen 5 5600 (6 Cores / 12 Threads)** inside live `RimWorldWin64.exe` combat colonies:
 
 | Scenario | Configuration | Avg Tick (`ms`) | Median Tick (`p50`) | Compute TPS (`DoSingleTick`) | `TickList` TPS | Wall-Clock TPS | Concurrency Exceptions |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **RimWorld 1.6 + 5 DLCs**<br>*(~291 Pawns in Combat, 3k Ticks)* | `1 Thread` *(Vanilla)*<br>**`12 Threads` *(OmniThread)*** | `6.14 ms`<br>**`2.93 ms`** | `5.04 ms`<br>**`1.12 ms` *(4.51x)*** | `162.99 TPS`<br>**`341.02 TPS` *(+109.2%)*** | `177.00 TPS`<br>**`402.44 TPS` *(+127.4%)*** | `119.60 TPS`<br>**`245.96 TPS` *(2.06x)*** | `0`<br>**`0`** |
 | **57-Mod Heavy Raid**<br>*(`CE` + `CAI-5000` + `RocketMan` + `VEF`, ~268 Pawns)* | `1 Thread` *(Baseline)*<br>**`12 Threads` *(OmniThread)*** | `11.22 ms`<br>**`8.06 ms`** | `7.76 ms`<br>**`4.70 ms` *(+65%)*** | `89.10 TPS`<br>**`124.0 TPS` *(+39%)*** | `104.85 TPS`<br>**`160.0 TPS` *(+53%)*** | `64.09 TPS`<br>**`91.3 TPS` *(+42%)*** | `0`<br>**`0`** |
-| **30,000-Tick Stress Test**<br>*(363 Pawns, 57 Mods, Live Player Input)* | **`12 Threads` *(OmniThread)***<br>[`benchmark_30k_active_player.json`](Benchmarks/benchmark_30k_active_player.json) | **`6.53 ms`** | **`5.75 ms`** | **`153.07 TPS`** | **`220.82 TPS`** | **`19.69M` `DoTick()`**<br>**`1.54M` Synced Ops** | **`0`**<br>*(100% Safe)* |
+| **30,000-Tick Stress Test**<br>*(363 Pawns, 57 Mods, Live Player Input)* | **`12 Threads` *(OmniThread)***<br>*(Continuous Endurance Run)* | **`6.53 ms`** | **`5.75 ms`** | **`153.07 TPS`** | **`220.82 TPS`** | **`19.69M` `DoTick()`**<br>**`1.54M` Synced Ops** | **`0`**<br>*(100% Safe)* |
 
 ---
 
