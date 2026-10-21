@@ -3,16 +3,12 @@
 **Multi-threading and Auto-Hz frame-pacing engine for RimWorld (1.3 – 1.7).**  
 Parallelizes RimWorld's core simulation across all CPU cores for up to **2x higher TPS** in large colonies and raids — with **zero race conditions**, **smooth 60–240 Hz camera pacing**, and **100% save-game compatibility**.
 
-### ⬇️ [Download OmniThread Ultimate v1.6.0.0 (.ZIP)](https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip)
-
----
-
-## Quick Install
+## Download & Install
 
 > [!IMPORTANT]
 > Requires **[Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)** ([GitHub](https://github.com/pardeike/HarmonyRimWorld/releases/latest)) placed at the **very top** of your mod list (above `Core`).
 
-1. **Download** the `.zip` archive from the link above.
+1. **Download [OmniThreadUltimate-v1.6.0.0.zip](https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip)**.
 2. **Extract** the `OmniThreadUltimate` folder into `RimWorld/Mods/`.
 3. **Enable** **OmniThread Ultimate** at the **very bottom** of your mod list (or click **Sort** in **RimPy** / **RimSort**).
 
