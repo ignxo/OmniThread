@@ -6,16 +6,13 @@
 
 ### Lock-Free Work-Stealing Multi-Threading & Auto-Hz Frame Pacing Engine for RimWorld (`1.3` – `1.7`)
 
-[![Latest Release](https://img.shields.io/github/v/release/ignxo/OmniThread-Ultimate?style=for-the-badge&logo=github&label=Release&color=38bdf8)](https://github.com/ignxo/OmniThread-Ultimate/releases/latest)
-[![RimWorld 1.3-1.7](https://img.shields.io/badge/RimWorld-1.3%20%E2%80%93%201.7-22c55e?style=for-the-badge&logo=steam&logoColor=white)](https://github.com/ignxo/OmniThread-Ultimate/releases/latest)
-[![Thread Safety](https://img.shields.io/badge/Concurrency%20Exceptions-0%20(25k%2B%20Ticks)-10b981?style=for-the-badge)](Benchmarks/benchmark_25k_active_player.json)
-[![Save Game Safe](https://img.shields.io/badge/Save%20Files-100%25%20Safe-a855f7?style=for-the-badge)](#-100-save-game-safe-add-or-remove-anytime)
-[![RimPy & RimSort](https://img.shields.io/badge/RimPy%20%26%20RimSort-Auto--Sort%20Ready-f59e0b?style=for-the-badge)](#-built-in-mod-compatibility--rimpy--rimsort-auto-sorting)
-[![License: MIT](https://img.shields.io/badge/License-MIT-64748b?style=for-the-badge)](LICENSE)
+## ⬇️ [POBIERZ / DOWNLOAD MOD (`OmniThreadUltimate-v1.6.0.0.zip`)](https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip) ⬇️
 
 <p align="center">
-  <a href="#-verified-live-benchmarks"><b>⚡ Benchmarks</b></a> &nbsp;&bull;&nbsp;
+  <a href="https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip"><b>📦 Direct Download (.ZIP)</b></a> &nbsp;&bull;&nbsp;
+  <a href="https://github.com/ignxo/OmniThread-Ultimate/releases/latest"><b>📋 Release Notes (v1.6.0.0)</b></a> &nbsp;&bull;&nbsp;
   <a href="#-how-to-install"><b>🚀 Quick Install</b></a> &nbsp;&bull;&nbsp;
+  <a href="#-verified-live-benchmarks"><b>⚡ Benchmarks</b></a> &nbsp;&bull;&nbsp;
   <a href="#-key-architecture--features"><b>🧠 Architecture</b></a> &nbsp;&bull;&nbsp;
   <a href="#-built-in-mod-compatibility--rimpy--rimsort-auto-sorting"><b>🧩 Mod Compatibility (60+)</b></a> &nbsp;&bull;&nbsp;
   <a href="#-in-game-controls--monitoring"><b>🎮 In-Game HUD (F10)</b></a>
@@ -29,7 +26,69 @@
 
 | 🏎️ **+109.2% Compute TPS** | 🛡️ **0 Race Conditions** | 💾 **Zero Save Footprint** | 🧩 **60+ Mod Profiles** |
 | :--- | :--- | :--- | :--- |
-| **4.51x faster median tick (`p50`)** and **2.06x real wall-clock TPS** in heavy 291-pawn combat. | Verified across **25,000+ continuous ticks** (`16.36M` parallel `DoTick` calls & `1.42M` synced ops). | Uses pure runtime Harmony patches. **Add or remove mid-playthrough** without corrupting `.rws` saves. | Native support for **RocketMan**, **CAI-5000**, **Combat Extended**, **VEF**, **Vehicle Framework**, and **RimPy**. |
+| **4.51x faster median tick (`p50`)** and **2.06x real wall-clock TPS** in heavy 291-pawn combat. | Verified across **30,000+ continuous ticks** (`19.69M` parallel `DoTick` calls & `1.54M` synced ops). | Uses pure runtime Harmony patches. **Add or remove mid-playthrough** without corrupting `.rws` saves. | Native support for **RocketMan**, **CAI-5000**, **Combat Extended**, **VEF**, **Vehicle Framework**, and **RimPy**. |
+
+---
+
+## 🚀 How to Install
+
+> [!IMPORTANT]
+> **Requirement:** Make sure you have **[Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)** ([GitHub Download](https://github.com/pardeike/HarmonyRimWorld/releases/latest)) installed and placed at the **very top** of your mod list (above `Core`).
+
+### Quick Install (30 Seconds)
+1. **Download (1-Click):** Click **[`OmniThreadUltimate-v1.6.0.0.zip` (Direct Download)](https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip)** (or open the **[Releases Page](https://github.com/ignxo/OmniThread-Ultimate/releases/latest)**).
+2. **Extract:** Unpack the `OmniThreadUltimate` folder into your `RimWorld/Mods/` directory so the path looks like `RimWorld/Mods/OmniThreadUltimate/About/About.xml`.
+3. **Load Order:** Enable **OmniThread Ultimate** and place it at the **very bottom** of your mod list (or click **Sort** in **RimPy** / **RimSort**).
+
+<details>
+<summary><b>📂 Click to expand: Detailed Step-by-Step Guide (Browser, Git, PowerShell, Folder Structure & RimPy)</b></summary>
+<br>
+
+#### Step 1: Download the Mod
+- **Option 1 — Direct Browser Download (Recommended):**
+  - Click here to download directly: **[`OmniThreadUltimate-v1.6.0.0.zip`](https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip)**
+  - Or visit [**Releases (v1.6.0.0)**](https://github.com/ignxo/OmniThread-Ultimate/releases/latest).
+- **Option 2 — Via Command Line (`git clone` or PowerShell):**
+  Open a terminal inside your `RimWorld/Mods` folder and run:
+  ```bash
+  git clone https://github.com/ignxo/OmniThread-Ultimate.git OmniThreadUltimate
+  ```
+  Or with PowerShell (no Git required):
+  ```powershell
+  Invoke-WebRequest -Uri "https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip" -OutFile "$env:TEMP\OmniThreadUltimate.zip"; Expand-Archive -Path "$env:TEMP\OmniThreadUltimate.zip" -DestinationPath "." -Force
+  ```
+
+#### Step 2: Verify Folder Structure inside `RimWorld/Mods`
+- **Steam (Windows):** `C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods`
+- **GOG / Standalone:** `<Your RimWorld Folder>\Mods`
+
+Make sure `About`, `Assemblies`, and `LoadFolders.xml` are directly inside `Mods/OmniThreadUltimate/`:
+```text
+RimWorld/
+├── RimWorldWin64.exe
+└── Mods/
+    └── OmniThreadUltimate/          <-- Mod folder inside Mods/
+        ├── About/
+        │   ├── About.xml
+        │   ├── Manifest.xml
+        │   └── Preview.png
+        ├── Assemblies/
+        │   └── OmniThreadUltimate.dll
+        └── LoadFolders.xml
+```
+
+#### Step 3: Enable in RimPy / RimSort or In-Game Mod Menu
+- **Using RimPy / RimSort (Recommended):**
+  1. Drag **OmniThread Ultimate** from **Inactive** to **Active**.
+  2. Ensure **Harmony** is active at the top of the list.
+  3. Click **Sort** — RimPy/RimSort automatically places **OmniThread Ultimate** at the bottom (below *RocketMan*, *CAI-5000*, and *Combat Extended*).
+  4. Click **Save** and **Run**.
+- **Using the In-Game Mod Menu:**
+  1. Launch `RimWorldWin64.exe` and open **Mods**.
+  2. Enable **Harmony** at the top (above `Core`).
+  3. Enable **OmniThread Ultimate** at the **very bottom** of your active list and click **Close**.
+
+</details>
 
 ---
 
@@ -75,79 +134,19 @@ Median Tick Latency (p50 ms) — Lower is Better
 | **1 Thread (57 Mods Baseline)** | `11.2229 ms` | `7.7636 ms` | `3.4217 ms` | `89.10 TPS` | `104.85 TPS` | `64.09 TPS` | `1 / 12` | `0` |
 | **12 Threads (`OmniThread Ultimate`)** | **`8.06–8.54 ms`** | **`4.70–5.17 ms` (+50–65%)** | **`1.43 ms` (2.39x)** | **`117–124 TPS` (+31–39%)** | **`142–160 TPS` (+36–53%)** | **`85.2–91.3 TPS` (+33–42%)** | **`12.00 / 12`** | **`0`** |
 
-### 3. 25,000-Tick Active Player Endurance Stress Test (382 Pawns on Map)
-Verified on a live 382-pawn colony over **25,000 continuous ticks** ([`Benchmarks/benchmark_25k_active_player.json`](Benchmarks/benchmark_25k_active_player.json)) while actively executing simulated player actions (`189` camera movements/zooms, `103` UI inspector tab switches, `258` combat draft/undraft orders, `250` designations, `206` blueprint/zone edits, `127` work/schedule changes, and `9` forced Storyteller raids/incidents):
+### 3. 30,000-Tick Active Player Endurance Stress Test (363 Pawns on Map, 57 Mods, 12 Threads)
+Verified on a live 363-pawn colony with 57 active mods over **30,000 continuous ticks** ([`Benchmarks/benchmark_30k_active_player.json`](Benchmarks/benchmark_30k_active_player.json)) while actively executing simulated player actions (`226` camera movements/zooms, `122` UI inspector tab switches, `309` combat draft/undraft orders, `300` designations, `246` blueprint/zone edits, `151` work/schedule changes, and `11` forced Storyteller raids/incidents):
 
 | Metric | Verified Result |
 | :--- | :--- |
-| **Total Continuous Ticks Verified** | **`25,000` ticks** |
-| **Spawned Pawns on Map** | **`382` pawns** |
-| **Parallel `Thing.DoTick()` Executions** | **`16,362,869`** |
-| **Synchronized `MainThreadSyncQueue` Operations** | **`1,420,154` enqueued / `1,420,154` flushed (100%)** |
-| **Prevented Multi-Thread Hazards** | **`1,421,099`** |
-| **Median Tick Time (`p50`) / Compute TPS** | **`3.34 ms` (`198.91 TPS` overall / `328.86 TPS` TickList)** |
+| **Total Continuous Ticks Verified** | **`30,000` ticks** |
+| **Spawned Pawns on Map** | **`363` pawns (`57` active mods)** |
+| **Active Worker Threads** | **`12 / 12` (`avgActiveWorkerThreadsPerTick: 12.00`)** |
+| **Parallel `Thing.DoTick()` Executions** | **`19,692,547`** |
+| **Synchronized `MainThreadSyncQueue` Operations** | **`1,537,871` enqueued / `1,537,871` flushed (100%)** |
+| **Prevented Multi-Thread Hazards** | **`1,538,440`** |
+| **Median Tick Time (`p50`) / Compute TPS** | **`5.75 ms` (`153.07 TPS` overall / `220.82 TPS` TickList)** |
 | **Concurrency / Player Action Exceptions** | **`0` (`100% Error-Free`)** |
-
----
-
-## 🚀 How to Install
-
-> [!IMPORTANT]
-> **Requirement:** Make sure you have **[Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)** installed and placed at the **very top** of your mod list (above `Core`).
-
-### Quick Install (30 Seconds)
-1. **Download:** Grab **[`OmniThreadUltimate-v1.6.0.0.zip`](https://github.com/ignxo/OmniThread-Ultimate/releases/latest)** from Releases (or click **`<> Code` -> `Download ZIP`**).
-2. **Extract:** Unpack the folder into your `RimWorld/Mods/` directory so the structure looks like `RimWorld/Mods/OmniThreadUltimate/About/About.xml`.
-3. **Load Order:** Enable **OmniThread Ultimate** and place it at the **very bottom** of your mod list (or click **Sort** in **RimPy** / **RimSort**).
-
-<details>
-<summary><b>📂 Click to expand: Detailed Step-by-Step Guide (Browser, Git, PowerShell, Folder Structure & RimPy)</b></summary>
-<br>
-
-#### Step 1: Download the Mod
-- **Option 1 — From Browser (No commands needed):**
-  - Go to [**Releases (v1.6.0.0)**](https://github.com/ignxo/OmniThread-Ultimate/releases/latest) and download **`OmniThreadUltimate-v1.6.0.0.zip`**, or click the green **`<> Code`** button at the top-right and select **`Download ZIP`**.
-- **Option 2 — Via Command Line (`git clone` or PowerShell):**
-  Open a terminal inside your `RimWorld/Mods` folder and run:
-  ```bash
-  git clone https://github.com/ignxo/OmniThread-Ultimate.git OmniThreadUltimate
-  ```
-  Or with PowerShell (no Git required):
-  ```powershell
-  Invoke-WebRequest -Uri "https://github.com/ignxo/OmniThread-Ultimate/releases/download/v1.6.0.0/OmniThreadUltimate-v1.6.0.0.zip" -OutFile "$env:TEMP\OmniThreadUltimate.zip"; Expand-Archive -Path "$env:TEMP\OmniThreadUltimate.zip" -DestinationPath "." -Force
-  ```
-
-#### Step 2: Verify Folder Structure inside `RimWorld/Mods`
-- **Steam (Windows):** `C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods`
-- **GOG / Standalone:** `<Your RimWorld Folder>\Mods`
-
-Make sure `About`, `Assemblies`, and `LoadFolders.xml` are directly inside `Mods/OmniThreadUltimate/`:
-```text
-RimWorld/
-├── RimWorldWin64.exe
-└── Mods/
-    └── OmniThreadUltimate/          <-- Mod folder inside Mods/
-        ├── About/
-        │   ├── About.xml
-        │   ├── Manifest.xml
-        │   └── Preview.png
-        ├── Assemblies/
-        │   └── OmniThreadUltimate.dll
-        └── LoadFolders.xml
-```
-
-#### Step 3: Enable in RimPy / RimSort or In-Game Mod Menu
-- **Using RimPy / RimSort (Recommended):**
-  1. Drag **OmniThread Ultimate** from **Inactive** to **Active**.
-  2. Ensure **Harmony** is active at the top of the list.
-  3. Click **Sort** — RimPy/RimSort automatically places **OmniThread Ultimate** at the bottom (below *RocketMan*, *CAI-5000*, and *Combat Extended*).
-  4. Click **Save** and **Run**.
-- **Using the In-Game Mod Menu:**
-  1. Launch `RimWorldWin64.exe` and open **Mods**.
-  2. Enable **Harmony** at the top (above `Core`).
-  3. Enable **OmniThread Ultimate** at the **very bottom** of your active list and click **Close**.
-
-</details>
 
 ---
 
@@ -230,7 +229,7 @@ flowchart LR
 - [`LoadFolders.xml`](LoadFolders.xml) — Multi-version folder mapping for RimWorld `1.3`, `1.4`, `1.5`, `1.6`, and `1.7`.
 - [`Assemblies/OmniThreadUltimate.dll`](Assemblies/OmniThreadUltimate.dll) — Compiled release assembly.
 - [`Source/OmniThreadUltimate/`](Source/OmniThreadUltimate/) — Full C# source code (`ParallelTickEngine.cs`, `ModCompatibilityManager.cs`, `MainThreadSyncQueue.cs`, `OmniThreadMod.cs`, `OmniThreadGUI.cs`, `AutoBenchmarkRunner.cs`, `SpatialPartitioner.cs`).
-- [`Benchmarks/`](Benchmarks/) — Verified JSON benchmark reports captured from live `RimWorldWin64.exe` runs (including [`benchmark_25k_active_player.json`](Benchmarks/benchmark_25k_active_player.json)).
+- [`Benchmarks/`](Benchmarks/) — Verified JSON benchmark reports captured from live `RimWorldWin64.exe` runs (including [`benchmark_30k_active_player.json`](Benchmarks/benchmark_30k_active_player.json) and [`benchmark_25k_active_player.json`](Benchmarks/benchmark_25k_active_player.json)).
 
 ---
 
