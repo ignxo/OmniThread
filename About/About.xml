@@ -58,7 +58,7 @@
   <description>OmniThread Ultimate - Lock-Free Multi-Threaded Engine and Auto-Hz Frame Pacer for RimWorld (1.3 - 1.7).
 
 Features:
-- Dedicated 12+ Thread Persistent Worker Pool with Atomic Work-Stealing and Pawn/Thing LPT Interleaving.
+- Dedicated All-Core Persistent Worker Pool with Atomic Work-Stealing and Pawn/Thing LPT Interleaving.
 - Auto-Hz Dynamic Frame Pacing: Automatically detects monitor refresh rate (60Hz - 240Hz) to eliminate camera micro-stutters while maximizing TPS.
 - Lock-Free [ThreadStatic] RegionTraverser BFS, ClosestThingReachable pools, and Harmony IL Transpilers.
 - Atomic MainThreadSyncQueue for deterministic, race-free Unity Engine / Map / Sound / Mote execution.
