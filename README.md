@@ -39,9 +39,10 @@ Parallelizes RimWorld's core simulation across all CPU cores for up to **2x high
 
 Captured on **AMD Ryzen 5 5600 (6 Cores / 12 Threads)** inside live `RimWorldWin64.exe` combat colonies:
 
-| Scenario | 1 Thread | 12 Threads (OmniThread) | Performance Gain |
+| Scenario | Vanilla Baseline (1 Thread) | OmniThread (12 Threads) | Performance Gain |
 | :--- | :---: | :---: | :---: |
-| **RimWorld 1.6 + 5 DLCs** *(291 Pawns in Combat)* | `163 TPS` *(5.04 ms)* | **`341 TPS` *(1.12 ms)*** | **+109% TPS** *(4.5x faster tick)* |
+| **Pure Vanilla RimWorld 1.6** *(Standard Colony)* | `360 TPS` *(2.60 ms)* | **`725 TPS` *(0.68 ms)*** | **+101% TPS** *(3.8x faster tick)* |
+| **Vanilla + 5 DLCs** *(291 Pawns in Combat)* | `163 TPS` *(5.04 ms)* | **`341 TPS` *(1.12 ms)*** | **+109% TPS** *(4.5x faster tick)* |
 | **57-Mod Heavy Raid** *(`CE` + `CAI-5000` + `RocketMan` + `VEF`)* | `89 TPS` *(7.76 ms)* | **`124 TPS` *(4.70 ms)*** | **+39% TPS** *(1.65x faster tick)* |
 
 - **Stability Stress Test:** **`0` errors** across **30,000 continuous ticks** (`363 pawns`, `57 active mods`, `19.69M` parallel `DoTick()` calls & `1.54M` synced operations).
