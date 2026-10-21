@@ -50,11 +50,11 @@ Captured on **AMD Ryzen 5 5600 (6 Cores / 12 Threads)** inside live `RimWorldWin
 
 ## Key Features & Controls
 
-- **All-Core Work-Stealing:** Persistent background worker pool with interleaved Pawn/Thing scheduling that keeps all CPU cores active without `ThreadPool` starvation.
-- **Auto-Hz Frame Pacer (60–240 Hz):** Detects your monitor's refresh rate and dynamically budgets simulation time per frame to eliminate camera micro-stutters at `3x`/`4x` speed.
-- **Deterministic Thread Safety:** Isolates pathfinding/BFS traversal, RNG seeds, and health/interaction buffers per thread while routing Unity/Map changes through an atomic FIFO queue.
-- **100% Save-Game Safe:** Pure runtime Harmony patches — adds **zero custom data** to `.rws` save files, so you can install or remove it mid-playthrough at any time.
-- **In-Game HUD (`F10`) & Settings:** Press **`F10`** on any map to toggle the live FPS/TPS & thread monitor, or adjust thread limits in **Options -> Mod Settings -> OmniThread Ultimate**.
+- **All-Core Parallel Simulation:** Persistent background worker pool with interleaved Pawn/Thing scheduling that scales across all CPU cores (`1..N` threads) without `ThreadPool` starvation.
+- **Uncapped Max Speed (`>>>`) & Auto-Hz Pacer (60–240 Hz):** Removes the vanilla `360 TPS` ceiling on Ultrafast speed while dynamically pacing ticks to your monitor's refresh rate for zero camera stutter.
+- **Deterministic Thread Safety & 100% Save-Game Safe:** Isolates pathfinding/BFS, RNG seeds, and health buffers per thread, routes Unity/Map mutations through an atomic FIFO queue, and writes **zero custom data** to `.rws` save files.
+- **Interactive `F10` HUD Overlay:** Press **`F10`** in-game to view live **Compute TPS**, **Wall TPS**, **tick time (`ms`)**, and **per-thread load bars**, or click the live buttons to toggle **Multi-Threading (`ON`/`OFF`)** and **Uncapped Speed (`>>>`)** on the fly.
+- **Mod Settings Menu:** Adjust worker thread count (`1–64`), toggle multi-threading, or toggle the `F10` overlay in **Options → Mod Settings → OmniThread Ultimate**.
 
 <details>
 <summary><b>Technical C# Architecture & Thread-Safety Internals</b></summary>
@@ -62,12 +62,11 @@ Captured on **AMD Ryzen 5 5600 (6 Cores / 12 Threads)** inside live `RimWorldWin
 
 ```mermaid
 flowchart LR
-    A["TickManager.DoSingleTick\n(Auto-Hz Frame Pacer)"] --> B["LPT Interleaved Queue\n(Pawns + Things)"]
-    B --> C1["Worker #01..#04\n[ThreadStatic] BFS & RNG"]
-    B --> C2["Worker #05..#08\n[ThreadStatic] BFS & RNG"]
-    B --> C3["Worker #09..#12\n[ThreadStatic] BFS & RNG"]
-    C1 & C2 & C3 --> D["MainThreadSyncQueue\n(Deterministic FIFO Flush)"]
-    D --> E["60–240 Hz Smooth Render\n(0 Concurrency Exceptions)"]
+    A["TickManager.DoSingleTick (Auto-Hz Pacer)"] --> B["Interleaved Work Queue (Pawns + Things)"]
+    B --> C1["Worker Thread #1 (ThreadStatic BFS & RNG)"]
+    B --> C2["Worker Thread #2..N (ThreadStatic BFS & RNG)"]
+    C1 & C2 --> D["MainThreadSyncQueue (Deterministic FIFO Flush)"]
+    D --> E["60–240 Hz Smooth Render (0 Exceptions)"]
 ```
 
 - **Lock-Free `ThreadLocalBFSWorker` (`RegionTraverser.BreadthFirstTraverse`):** Replaces RimWorld's single-threaded `freeWorkers` queue and shared `region.reachedIndex` mutations with per-thread BFS worker pools and isolated `closedRegionIds` sets.
