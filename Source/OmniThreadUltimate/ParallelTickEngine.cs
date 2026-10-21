@@ -739,7 +739,8 @@ namespace OmniThreadUltimate
             }
 
             int ticksGame = Find.TickManager.TicksGame;
-            int optimalWorkers = Environment.ProcessorCount >= 12 ? 6 : Math.Max(2, Environment.ProcessorCount);
+            int configuredCap = OmniThreadMod.MaxWorkerThreads > 0 ? OmniThreadMod.MaxWorkerThreads : Math.Max(2, Environment.ProcessorCount);
+            int optimalWorkers = Math.Max(2, Math.Min(configuredCap, Environment.ProcessorCount));
             int maxDop = parallelOptions.MaxDegreeOfParallelism > 0 ? Math.Min(parallelOptions.MaxDegreeOfParallelism, optimalWorkers) : optimalWorkers;
             EnsureDedicatedWorkersInitialized(Math.Max(2, Environment.ProcessorCount));
 
@@ -1154,85 +1155,13 @@ namespace OmniThreadUltimate
     public static class Patch_Map_MapPostTick
     {
         [HarmonyPriority(Priority.Last)]
-        public static bool Prefix(Map __instance)
+        public static void Postfix()
         {
-            if (!OmniThreadMod.EnableMultithreading || OmniThreadMod.IterationLevel < 5)
-            {
-                return true;
-            }
-
-            Map map = __instance;
-            try
-            {
-                map.wildAnimalSpawner.WildAnimalSpawnerTick();
-            }
-            catch (Exception ex)
-            {
-                MainThreadSyncQueue.RecordWorkerException("WildAnimalSpawnerTick", ex);
-            }
-            try
-            {
-                map.wildPlantSpawner.WildPlantSpawnerTick();
-            }
-            catch (Exception ex2)
-            {
-                MainThreadSyncQueue.RecordWorkerException("WildPlantSpawnerTick", ex2);
-            }
-
-            try
+            if (OmniThreadMod.EnableMultithreading)
             {
                 Interlocked.Add(ref ParallelTickEngine.TotalMapPostParallelSubsystems, 3);
-                map.powerNetManager.PowerNetsTick();
-                map.gasGrid.Tick();
-                if (ModsConfig.BiotechActive && map.pollutionGrid != null)
-                {
-                    map.pollutionGrid.PollutionTick();
-                }
-                map.resourceCounter.ResourceCounterTick();
-                map.fireWatcher.FireWatcherTick();
-                map.tempTerrain.Tick();
+                MainThreadSyncQueue.Flush();
             }
-            catch (Exception eFast)
-            {
-                MainThreadSyncQueue.RecordWorkerException("MapPostTick.FastSubsystems", eFast);
-            }
-
-            try
-            {
-                map.steadyEnvironmentEffects.SteadyEnvironmentEffectsTick();
-                map.deferredSpawner.DeferredSpawnerTick();
-                map.lordManager.LordManagerTick();
-                map.passingShipManager.PassingShipManagerTick();
-                map.debugDrawer.DebugDrawerTick();
-                map.lordsStarter.VoluntarilyJoinableLordsStarterTick();
-                map.gameConditionManager.GameConditionManagerTick();
-                map.weatherManager.WeatherManagerTick();
-                map.weatherDecider.WeatherDeciderTick();
-                if (ModsConfig.OdysseyActive && map.waterBodyTracker != null)
-                {
-                    map.waterBodyTracker.Tick();
-                }
-                map.flecks.FleckManagerTick();
-                map.effecterMaintainer.EffecterMaintainerTick();
-                MapComponentUtility.MapComponentTick(map);
-                if (map.TileInfo != null && map.TileInfo.Mutators != null)
-                {
-                    foreach (TileMutatorDef mutator in map.TileInfo.Mutators)
-                    {
-                        if (mutator.Worker != null)
-                        {
-                            mutator.Worker.Tick(map);
-                        }
-                    }
-                }
-            }
-            catch (Exception exRest)
-            {
-                MainThreadSyncQueue.RecordWorkerException("MapPostTick.SequentialTail", exRest);
-            }
-
-            MainThreadSyncQueue.Flush();
-            return false;
         }
     }
 
@@ -1611,7 +1540,7 @@ namespace OmniThreadUltimate
     {
         public static void Prefix(Thing __instance, ref bool __state)
         {
-            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance.Spawned)
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null && __instance.Spawned)
             {
                 Monitor.Enter(ParallelTickEngine.PositionLock, ref __state);
             }
@@ -1648,6 +1577,12 @@ namespace OmniThreadUltimate
             }
             tsTargets.Clear();
 
+            if (__instance == null || th == null)
+            {
+                __result = tsTargets;
+                return false;
+            }
+
             Thing thing = th.Thing;
             if (thing == null)
             {
@@ -1671,11 +1606,14 @@ namespace OmniThreadUltimate
             lock (ParallelTickEngine.AttackTargetsLock)
             {
                 HashSet<IAttackTarget> hostileSet = __instance.TargetsHostileToFaction(faction);
-                foreach (IAttackTarget item in hostileSet)
+                if (hostileSet != null)
                 {
-                    if (item != null)
+                    foreach (IAttackTarget item in hostileSet)
                     {
-                        tsRawHostiles.Add(item);
+                        if (item != null)
+                        {
+                            tsRawHostiles.Add(item);
+                        }
                     }
                 }
             }
@@ -2436,6 +2374,11 @@ namespace OmniThreadUltimate
             {
                 return true;
             }
+            if (__instance == null || __instance.subNodes == null)
+            {
+                __result = ThinkResult.NoJob;
+                return false;
+            }
 
             List<ThinkNode> subNodes = __instance.subNodes;
             int count = subNodes.Count;
@@ -2444,6 +2387,11 @@ namespace OmniThreadUltimate
             {
                 for (int i = 0; i < count; i++)
                 {
+                    ThinkNode node = subNodes[i];
+                    if (node == null)
+                    {
+                        continue;
+                    }
                     int insertIndex = Rand.Range(0, workingNodes.Count - 1);
                     if (insertIndex < 0)
                     {
@@ -2453,7 +2401,7 @@ namespace OmniThreadUltimate
                     {
                         insertIndex = workingNodes.Count;
                     }
-                    workingNodes.Insert(insertIndex, subNodes[i]);
+                    workingNodes.Insert(insertIndex, node);
                 }
 
                 while (workingNodes.Count > 0)
@@ -2462,10 +2410,15 @@ namespace OmniThreadUltimate
                     int bestIdx = -1;
                     for (int j = 0; j < workingNodes.Count; j++)
                     {
+                        ThinkNode candidate = workingNodes[j];
+                        if (candidate == null)
+                        {
+                            continue;
+                        }
                         float p = 0f;
                         try
                         {
-                            p = workingNodes[j].GetPriority(pawn);
+                            p = candidate.GetPriority(pawn);
                         }
                         catch (Exception ex)
                         {
@@ -4080,7 +4033,7 @@ namespace OmniThreadUltimate
             {
                 return true;
             }
-            if (!root.IsValid || !root.InBounds(map))
+            if (map == null || !root.IsValid || !root.InBounds(map))
             {
                 __result = 0f;
                 return false;
@@ -4104,15 +4057,23 @@ namespace OmniThreadUltimate
             }
 
             visRooms.Add(room);
-            if (room.IsDoorway && room.Regions.Count == 1)
+            if (room.IsDoorway && room.Regions != null && room.Regions.Count == 1)
             {
                 Region reg = room.Regions[0];
-                for (int i = 0; i < reg.links.Count; i++)
+                if (reg != null && reg.links != null)
                 {
-                    Region other = reg.links[i].GetOtherRegion(reg);
-                    if (other != null && other.Room != null && !visRooms.Contains(other.Room))
+                    for (int i = 0; i < reg.links.Count; i++)
                     {
-                        visRooms.Add(other.Room);
+                        RegionLink link = reg.links[i];
+                        if (link == null)
+                        {
+                            continue;
+                        }
+                        Region other = link.GetOtherRegion(reg);
+                        if (other != null && other.Room != null && !visRooms.Contains(other.Room))
+                        {
+                            visRooms.Add(other.Room);
+                        }
                     }
                 }
             }
@@ -5551,9 +5512,14 @@ namespace OmniThreadUltimate
 
         public static bool Prefix(ThinkNode_Random __instance, Pawn pawn, JobIssueParams jobParams, ref ThinkResult __result)
         {
-            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection || __instance == null)
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
                 return true;
+            }
+            if (__instance == null || __instance.subNodes == null)
+            {
+                __result = ThinkResult.NoJob;
+                return false;
             }
 
             List<ThinkNode>[] pool = tsPool;
@@ -5588,11 +5554,19 @@ namespace OmniThreadUltimate
             {
                 for (int i = 0; i < __instance.subNodes.Count; i++)
                 {
-                    tempList.Add(__instance.subNodes[i]);
+                    ThinkNode sub = __instance.subNodes[i];
+                    if (sub != null)
+                    {
+                        tempList.Add(sub);
+                    }
                 }
                 tempList.Shuffle();
                 for (int j = 0; j < tempList.Count; j++)
                 {
+                    if (tempList[j] == null)
+                    {
+                        continue;
+                    }
                     ThinkResult result = tempList[j].TryIssueJobPackage(pawn, jobParams);
                     if (result.IsValid)
                     {
@@ -5872,7 +5846,7 @@ namespace OmniThreadUltimate
     public static class Patch_WealthWatcher_ForceRecount
     {
         private static readonly FieldInfo Field_lastCountTick = AccessTools.Field(typeof(WealthWatcher), "lastCountTick");
-        private static int sLastEnqueuedStamp = -1;
+        private static readonly long[] sLastEnqueuedTokens = new long[64];
 
         public static bool Prefix(WealthWatcher __instance, bool allowDuringInit)
         {
@@ -5883,7 +5857,10 @@ namespace OmniThreadUltimate
                     Field_lastCountTick.SetValue(__instance, (float)Find.TickManager.TicksGame);
                 }
                 int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
-                if (Interlocked.Exchange(ref sLastEnqueuedStamp, stamp) == stamp)
+                int instHash = RuntimeHelpers.GetHashCode(__instance);
+                int slot = instHash & 63;
+                long token = ((long)instHash << 32) | (uint)stamp;
+                if (Interlocked.Exchange(ref sLastEnqueuedTokens[slot], token) == token)
                 {
                     return false;
                 }
@@ -5919,6 +5896,23 @@ namespace OmniThreadUltimate
             }
         }
 
+        public static bool Prefix(Pawn_RecordsTracker __instance)
+        {
+            if (__instance == null || __instance.pawn == null || __instance.pawn.Destroyed)
+            {
+                return false;
+            }
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Pawn pawn = __instance.pawn;
+                if (pawn.jobs != null && pawn.jobs.curJob != null && pawn.jobs.curDriver == null)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         public static Exception Finalizer(Exception __exception)
         {
             if (__exception is NullReferenceException && OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
@@ -5932,7 +5926,7 @@ namespace OmniThreadUltimate
     [HarmonyPatch]
     public static class Patch_ReachabilityCache_Clear
     {
-        private static int sLastEnqueuedStamp = -1;
+        private static readonly long[] sLastEnqueuedTokens = new long[64];
 
         public static IEnumerable<MethodBase> TargetMethods()
         {
@@ -5949,7 +5943,10 @@ namespace OmniThreadUltimate
             if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection && __instance != null)
             {
                 int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
-                if (Interlocked.Exchange(ref sLastEnqueuedStamp, stamp) == stamp)
+                int instHash = RuntimeHelpers.GetHashCode(__instance);
+                int slot = instHash & 63;
+                long token = ((long)instHash << 32) | (uint)stamp;
+                if (Interlocked.Exchange(ref sLastEnqueuedTokens[slot], token) == token)
                 {
                     return false;
                 }

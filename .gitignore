@@ -1,5 +1,12 @@
-﻿bin/
+bin/
 obj/
 *.user
 *.suo
 .vs/
+.idea/
+*.DotSettings.user
+*.pdb
+*.zip
+.DS_Store
+Thumbs.db
+BUGS.md

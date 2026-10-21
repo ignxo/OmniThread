@@ -1,29 +1,33 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{8A9F4D12-5C3E-4B11-9D2A-7E6F5A1B2C3D}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <TargetFramework>net472</TargetFramework>
     <RootNamespace>OmniThreadUltimate</RootNamespace>
     <AssemblyName>OmniThreadUltimate</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <Deterministic>true</Deterministic>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>pdbonly</DebugType>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <Optimize>true</Optimize>
-    <OutputPath>..\..\game\Mods\OmniThreadUltimate\Assemblies\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+    <Deterministic>true</Deterministic>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <OutputPath Condition="Exists('..\..\game\Mods\OmniThreadUltimate\Assemblies\')">..\..\game\Mods\OmniThreadUltimate\Assemblies\</OutputPath>
+    <OutputPath Condition="!Exists('..\..\game\Mods\OmniThreadUltimate\Assemblies\')">..\..\Assemblies\</OutputPath>
   </PropertyGroup>
+
   <ItemGroup>
+    <Compile Include="OmniThreadMod.cs" />
+    <Compile Include="MainThreadSyncQueue.cs" />
+    <Compile Include="SpatialPartitioner.cs" />
+    <Compile Include="ModCompatibilityManager.cs" />
+    <Compile Include="ParallelTickEngine.cs" />
+    <Compile Include="AutoBenchmarkRunner.cs" />
+    <Compile Include="OmniThreadGUI.cs" />
+  </ItemGroup>
+
+  <!-- Local RimWorld Managed Assemblies (when building inside local workspace) -->
+  <ItemGroup Condition="Exists('..\..\game\RimWorldWin64_Data\Managed\Assembly-CSharp.dll')">
     <Reference Include="0Harmony">
       <HintPath>..\..\game\Mods\2009463077\Current\Assemblies\0Harmony.dll</HintPath>
       <Private>False</Private>
@@ -60,18 +64,11 @@
       <HintPath>..\..\game\RimWorldWin64_Data\Managed\Unity.Mathematics.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xml" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="OmniThreadMod.cs" />
-    <Compile Include="MainThreadSyncQueue.cs" />
-    <Compile Include="SpatialPartitioner.cs" />
-    <Compile Include="ModCompatibilityManager.cs" />
-    <Compile Include="ParallelTickEngine.cs" />
-    <Compile Include="AutoBenchmarkRunner.cs" />
-    <Compile Include="OmniThreadGUI.cs" />
+
+  <!-- Portable NuGet Reference Packages (for GitHub Actions CI & standalone clones) -->
+  <ItemGroup Condition="!Exists('..\..\game\RimWorldWin64_Data\Managed\Assembly-CSharp.dll')">
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.*" PrivateAssets="All" />
+    <PackageReference Include="Lib.Harmony" Version="2.3.*" ExcludeAssets="runtime" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

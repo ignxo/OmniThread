@@ -226,25 +226,26 @@ namespace OmniThreadUltimate
                 return;
             }
             bool[] flags = FaultedThingIdFlags;
-            if (id >= flags.Length)
+            if (id < flags.Length && flags[id])
             {
-                lock (ParallelTickEngine.GlobalSyncLock)
-                {
-                    flags = FaultedThingIdFlags;
-                    if (id >= flags.Length)
-                    {
-                        int newLen = Math.Max(flags.Length * 2, id + 65536);
-                        bool[] newFlags = new bool[newLen];
-                        Array.Copy(flags, newFlags, flags.Length);
-                        FaultedThingIdFlags = newFlags;
-                        flags = newFlags;
-                    }
-                }
+                return;
             }
-            if (!flags[id])
+            lock (ParallelTickEngine.GlobalSyncLock)
             {
-                flags[id] = true;
-                Interlocked.Increment(ref AutoSafeModFallbackTypesCount);
+                flags = FaultedThingIdFlags;
+                if (id >= flags.Length)
+                {
+                    int newLen = Math.Max(flags.Length * 2, id + 65536);
+                    bool[] newFlags = new bool[newLen];
+                    Array.Copy(flags, newFlags, flags.Length);
+                    FaultedThingIdFlags = newFlags;
+                    flags = newFlags;
+                }
+                if (!flags[id])
+                {
+                    flags[id] = true;
+                    Interlocked.Increment(ref AutoSafeModFallbackTypesCount);
+                }
             }
         }
 
@@ -707,21 +708,27 @@ namespace OmniThreadUltimate
             }
 
             bool[] flags = PreWarmedThingIdFlags;
-            int flagsLen = flags.Length;
-            if (id >= flagsLen)
-            {
-                int newLen = Math.Max(flagsLen * 2, id + 65536);
-                bool[] newFlags = new bool[newLen];
-                Array.Copy(flags, newFlags, flagsLen);
-                flags = newFlags;
-                PreWarmedThingIdFlags = newFlags;
-            }
-
-            if (flags[id])
+            if (id < flags.Length && flags[id])
             {
                 return false;
             }
-            flags[id] = true;
+            lock (ParallelTickEngine.GlobalSyncLock)
+            {
+                flags = PreWarmedThingIdFlags;
+                if (id >= flags.Length)
+                {
+                    int newLen = Math.Max(flags.Length * 2, id + 65536);
+                    bool[] newFlags = new bool[newLen];
+                    Array.Copy(flags, newFlags, flags.Length);
+                    PreWarmedThingIdFlags = newFlags;
+                    flags = newFlags;
+                }
+                if (flags[id])
+                {
+                    return false;
+                }
+                flags[id] = true;
+            }
 
             int compTypeCount = CAICompTypes.Length;
             List<ThingComp> allComps = twc.AllComps;

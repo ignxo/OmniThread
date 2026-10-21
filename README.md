@@ -145,7 +145,8 @@ RimWorld/
 
 ### Step 4: How to Use In-Game
 - **Zero configuration needed:** Multi-threading (**all CPU threads**) and **Auto-Hz Frame Pacing** turn on **100% automatically** as soon as you load a save or start a new colony.
-- **Live FPS / TPS & Thread Monitor (`F11`):** While playing on a map, press **`F11`** on your keyboard at any time to open or hide the **OmniThread Ultimate** status window in the top-left corner (shows live TPS, tick time in `ms`, and active CPU threads).
+- **Mod Settings Menu:** You can customize thread count limits, max speed uncapping, and startup HUD visibility under **Options -> Mod Settings -> OmniThread Ultimate** (settings are automatically saved across sessions).
+- **Live FPS / TPS & Thread Monitor (`F10`):** While playing on a map, press **`F10`** on your keyboard at any time to open or hide the **OmniThread Ultimate** status window in the top-left corner (shows live TPS, tick time in `ms`, and active CPU threads).
 
 ---
 

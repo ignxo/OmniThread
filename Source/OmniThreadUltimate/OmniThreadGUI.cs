@@ -118,6 +118,11 @@ namespace OmniThreadUltimate
                 if (Widgets.ButtonText(modeBtnRect, btnLabel))
                 {
                     OmniThreadMod.EnableMultithreading = !OmniThreadMod.EnableMultithreading;
+                    if (OmniThreadModController.Settings != null)
+                    {
+                        OmniThreadModController.Settings.EnableMultithreading = OmniThreadMod.EnableMultithreading;
+                        OmniThreadModController.Settings.Write();
+                    }
                 }
                 curY += 22f;
 
@@ -126,6 +131,11 @@ namespace OmniThreadUltimate
                 if (Widgets.ButtonText(speedCapBtnRect, speedCapLabel))
                 {
                     OmniThreadMod.UncapMaxTimeSpeed = !OmniThreadMod.UncapMaxTimeSpeed;
+                    if (OmniThreadModController.Settings != null)
+                    {
+                        OmniThreadModController.Settings.UncapMaxTimeSpeed = OmniThreadMod.UncapMaxTimeSpeed;
+                        OmniThreadModController.Settings.Write();
+                    }
                 }
                 curY += 22f;
             }

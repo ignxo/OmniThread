@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using System.Threading;
 using HarmonyLib;
@@ -21,41 +22,49 @@ namespace OmniThreadUltimate
         public static int MainThreadId = -1;
         public static volatile bool InParallelSection = false;
 
-        public static Sustainer DummySustainer;
-        public static MoteBubble DummyMoteBubble;
+        public static volatile Sustainer DummySustainer;
+        public static volatile MoteBubble DummyMoteBubble;
         private static FieldInfo SustainerEndRealTimeField;
         private static FieldInfo SustainerLastMaintainTickField;
 
         public static Sustainer GetDummySustainer()
         {
-            if (DummySustainer == null)
+            Sustainer current = DummySustainer;
+            if (current != null)
             {
-                try
-                {
-                    Sustainer dummy = (Sustainer)FormatterServices.GetUninitializedObject(typeof(Sustainer));
-                    if (SustainerEndRealTimeField == null)
-                    {
-                        SustainerEndRealTimeField = typeof(Sustainer).GetField("endRealTime", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                    }
-                    if (SustainerEndRealTimeField != null)
-                    {
-                        SustainerEndRealTimeField.SetValue(dummy, -1f);
-                    }
-                    dummy.externalParams = new SoundParams();
-                    dummy.scopeFader = new SustainerScopeFader();
-                    dummy.def = new SoundDef();
-                    FieldInfo subSustainersField = typeof(Sustainer).GetField("subSustainers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                    if (subSustainersField != null)
-                    {
-                        subSustainersField.SetValue(dummy, new List<SubSustainer>());
-                    }
-                    DummySustainer = dummy;
-                }
-                catch
-                {
-                }
+                return current;
             }
-            return DummySustainer;
+            lock (ParallelTickEngine.GlobalSyncLock)
+            {
+                if (DummySustainer == null)
+                {
+                    try
+                    {
+                        Sustainer dummy = (Sustainer)FormatterServices.GetUninitializedObject(typeof(Sustainer));
+                        if (SustainerEndRealTimeField == null)
+                        {
+                            SustainerEndRealTimeField = typeof(Sustainer).GetField("endRealTime", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                        }
+                        if (SustainerEndRealTimeField != null)
+                        {
+                            SustainerEndRealTimeField.SetValue(dummy, -1f);
+                        }
+                        dummy.externalParams = new SoundParams();
+                        dummy.scopeFader = new SustainerScopeFader();
+                        dummy.def = new SoundDef();
+                        FieldInfo subSustainersField = typeof(Sustainer).GetField("subSustainers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                        if (subSustainersField != null)
+                        {
+                            subSustainersField.SetValue(dummy, new List<SubSustainer>());
+                        }
+                        DummySustainer = dummy;
+                    }
+                    catch
+                    {
+                    }
+                }
+                return DummySustainer;
+            }
         }
 
         public static void SetSustainerMaintainTickSafe(Sustainer sustainer, int tick)
@@ -82,19 +91,27 @@ namespace OmniThreadUltimate
 
         public static MoteBubble GetDummyMoteBubble()
         {
-            if (DummyMoteBubble == null)
+            MoteBubble current = DummyMoteBubble;
+            if (current != null)
             {
-                try
-                {
-                    MoteBubble dummy = (MoteBubble)FormatterServices.GetUninitializedObject(typeof(MoteBubble));
-                    dummy.def = new ThingDef();
-                    DummyMoteBubble = dummy;
-                }
-                catch
-                {
-                }
+                return current;
             }
-            return DummyMoteBubble;
+            lock (ParallelTickEngine.GlobalSyncLock)
+            {
+                if (DummyMoteBubble == null)
+                {
+                    try
+                    {
+                        MoteBubble dummy = (MoteBubble)FormatterServices.GetUninitializedObject(typeof(MoteBubble));
+                        dummy.def = new ThingDef();
+                        DummyMoteBubble = dummy;
+                    }
+                    catch
+                    {
+                    }
+                }
+                return DummyMoteBubble;
+            }
         }
 
         public static long TotalEnqueuedActions = 0;
@@ -390,7 +407,7 @@ namespace OmniThreadUltimate
         [ThreadStatic]
         private static int tsStackDepth;
 
-        public static bool Prefix(JobDriver __instance)
+        public static bool Prefix(JobDriver __instance, ref bool __state)
         {
             if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
@@ -400,8 +417,7 @@ namespace OmniThreadUltimate
             {
                 return false;
             }
-            tsStackDepth++;
-            if (tsStackDepth > 16)
+            if (tsStackDepth + 1 > 16)
             {
                 Interlocked.Increment(ref MainThreadSyncQueue.PreventedThreadHazards);
                 throw new InvalidOperationException("OmniThread loop guard: ReadyForNextToil recursion depth > 16.");
@@ -424,12 +440,14 @@ namespace OmniThreadUltimate
                 tsLastDriver = __instance;
                 tsTransitionCount = 1;
             }
+            tsStackDepth++;
+            __state = true;
             return true;
         }
 
-        public static void Finalizer()
+        public static void Finalizer(JobDriver __instance, Exception __exception, bool __state)
         {
-            if (tsStackDepth > 0)
+            if (__state && tsStackDepth > 0)
             {
                 tsStackDepth--;
             }
@@ -1126,7 +1144,7 @@ namespace OmniThreadUltimate
     [HarmonyPatch(typeof(ResourceCounter), "UpdateResourceCounts")]
     public static class Patch_ResourceCounter_UpdateResourceCounts
     {
-        private static int sLastEnqueuedStamp = -1;
+        private static readonly long[] sLastEnqueuedTokens = new long[64];
 
         public static bool Prefix(ResourceCounter __instance)
         {
@@ -1134,8 +1152,15 @@ namespace OmniThreadUltimate
             {
                 return true;
             }
+            if (__instance == null)
+            {
+                return false;
+            }
             int stamp = MainThreadSyncQueue.CurrentQueueTickStamp;
-            if (Interlocked.Exchange(ref sLastEnqueuedStamp, stamp) == stamp)
+            int instHash = RuntimeHelpers.GetHashCode(__instance);
+            int slot = instHash & 63;
+            long token = ((long)instHash << 32) | (uint)stamp;
+            if (Interlocked.Exchange(ref sLastEnqueuedTokens[slot], token) == token)
             {
                 return false;
             }
@@ -1243,11 +1268,11 @@ namespace OmniThreadUltimate
     {
         public static bool Prefix(Thing t)
         {
-            if (t == null)
+            if (t == null || !t.Spawned || t.Map == null)
             {
                 return false;
             }
-            if ((OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection) || !t.Spawned || t.Map == null)
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
             {
                 Thing thingRef = t;
                 MainThreadSyncQueue.Enqueue(delegate

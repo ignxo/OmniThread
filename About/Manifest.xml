@@ -14,12 +14,29 @@
     <li>Ludeon.RimWorld.Anomaly</li>
     <li>Ludeon.RimWorld.Odyssey</li>
     <li>zetrith.prepatcher</li>
+    <li>bs.fishery</li>
+    <li>bs.performance</li>
     <li>UnlimitedHugs.HugsLib</li>
     <li>OskarPotocki.VanillaFactionsExpanded.Core</li>
+    <li>erdelf.HumanoidAlienRaces</li>
     <li>CETeam.CombatExtended</li>
     <li>SmashPhil.VehicleFramework</li>
+    <li>OskarPotocki.VanillaVehiclesExpanded</li>
+    <li>VanillaExpanded.VPE</li>
+    <li>VanillaExpanded.VSIE</li>
+    <li>VanillaExpanded.VME</li>
     <li>com.abobashark.zoologymod</li>
+    <li>roolo.runandgun</li>
+    <li>PeteTimesSix.SimpleSidearms</li>
+    <li>Mehni.PickUpAndHaul</li>
+    <li>avilmask.CommonSense</li>
+    <li>Uuugggg.SmartMedicine</li>
+    <li>UnlimitedHugs.AllowTool</li>
+    <li>Orion.Hospitality</li>
+    <li>Dubwise.DubsBadHygiene</li>
+    <li>LWM.DeepStorage</li>
     <li>Taranchuk.PerformanceOptimizer</li>
+    <li>dubwise.dubsperformanceanalyzer</li>
     <li>Krkr.rule56</li>
     <li>vr.missilegirl</li>
   </loadAfter>

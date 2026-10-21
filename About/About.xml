@@ -64,5 +64,5 @@ Features:
 - Atomic MainThreadSyncQueue for deterministic, race-free Unity Engine / Map / Sound / Mote execution.
 - 100% Save-Game Safe: Can be added or removed mid-playthrough at any time without affecting save files.
 - Built-in Compatibility and Auto-Guard for 60+ popular mods (RocketMan, CAI-5000 / CombatAI, Combat Extended, Vehicle Framework, Vanilla Expanded Framework, Zoology, RunAndGun, Simple Sidearms, Pick Up And Haul, CommonSense, Hospitality, Dubs Bad Hygiene, Performance Optimizer) and RimPy / RimSort auto-sorting.
-- Press F11 in-game to toggle the real-time multi-threading telemetry overlay.</description>
+- Press F10 in-game to toggle the real-time multi-threading telemetry overlay (or configure via Options -&gt; Mod Settings).</description>
 </ModMetaData>

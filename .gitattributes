@@ -1,0 +1,16 @@
+* text=auto eol=lf
+*.cs text eol=lf
+*.csproj text eol=lf
+*.xml text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.png binary
+*.dll binary
+
+# Exclude development folders from git archive / GitHub Download ZIP
+.github/ export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+Benchmarks/ export-ignore
+Source/ export-ignore
+Tests/ export-ignore

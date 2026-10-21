@@ -21,6 +21,7 @@ namespace OmniThreadUltimate
 
         public static bool IsAutoTestMode = false;
         public static string AutoTestSaveName = null;
+        public static string AutoTestOutputDir = null;
         public static bool MapLaunchTriggered = false;
         public static bool PawnsSpawned = false;
         public static bool IsMeasuring = false;
@@ -80,6 +81,11 @@ namespace OmniThreadUltimate
                     OmniThreadMod.IterationLevel = parsedIter;
                     OmniThreadMod.EnableMultithreading = (parsedIter > 0);
                 }
+            }
+            string outDirVal;
+            if (GenCommandLine.TryGetCommandLineArg("autotest-out", out outDirVal) && !string.IsNullOrEmpty(outDirVal))
+            {
+                AutoTestOutputDir = outDirVal.Trim();
             }
 
             if (IsAutoTestMode)
@@ -797,6 +803,25 @@ namespace OmniThreadUltimate
             }
         }
 
+        private static string ResolveOutputDir()
+        {
+            if (!string.IsNullOrEmpty(AutoTestOutputDir) && Directory.Exists(AutoTestOutputDir))
+            {
+                return AutoTestOutputDir;
+            }
+            try
+            {
+                if (!string.IsNullOrEmpty(GenFilePaths.SaveDataFolderPath) && Directory.Exists(GenFilePaths.SaveDataFolderPath))
+                {
+                    return GenFilePaths.SaveDataFolderPath;
+                }
+            }
+            catch
+            {
+            }
+            return Environment.CurrentDirectory;
+        }
+
         private static void CompleteBenchmarkAndShutdown()
         {
             try
@@ -810,8 +835,9 @@ namespace OmniThreadUltimate
 
             try
             {
-                string screenshotPath = "d:/rimworld_multithread_workspace/autotest_screenshot.png";
-                string iterScreenshotPath = string.Format("d:/rimworld_multithread_workspace/screenshot_iter_{0}.png", OmniThreadMod.IterationLevel);
+                string outDir = ResolveOutputDir();
+                string screenshotPath = Path.Combine(outDir, "autotest_screenshot.png");
+                string iterScreenshotPath = Path.Combine(outDir, string.Format("screenshot_iter_{0}.png", OmniThreadMod.IterationLevel));
                 ScreenCapture.CaptureScreenshot(screenshotPath);
                 ScreenCapture.CaptureScreenshot(iterScreenshotPath);
                 Log.Message("[OmniThread Ultimate] Captured screenshot to " + screenshotPath);
@@ -939,8 +965,9 @@ namespace OmniThreadUltimate
             sb.AppendLine("}");
 
             string json = sb.ToString();
-            string mainPath = "d:/rimworld_multithread_workspace/benchmark_results.json";
-            string iterPath = string.Format("d:/rimworld_multithread_workspace/benchmark_iter_{0}.json", OmniThreadMod.IterationLevel);
+            string outDir = ResolveOutputDir();
+            string mainPath = Path.Combine(outDir, "benchmark_results.json");
+            string iterPath = Path.Combine(outDir, string.Format("benchmark_iter_{0}.json", OmniThreadMod.IterationLevel));
 
             File.WriteAllText(mainPath, json, Encoding.UTF8);
             File.WriteAllText(iterPath, json, Encoding.UTF8);
