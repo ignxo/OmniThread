@@ -1,14 +1,175 @@
+<div align="center">
+
+<img src="About/Preview.png" alt="OmniThread Ultimate — Lock-Free Multi-Threaded Engine for RimWorld" width="100%" />
+
+# OmniThread Ultimate
+
+### Lock-Free Work-Stealing Multi-Threading & Auto-Hz Frame Pacing Engine for RimWorld (`1.3` – `1.7`)
+
+[![Latest Release](https://img.shields.io/github/v/release/ignxo/OmniThread-Ultimate?style=for-the-badge&logo=github&label=Release&color=38bdf8)](https://github.com/ignxo/OmniThread-Ultimate/releases/latest)
+[![RimWorld 1.3-1.7](https://img.shields.io/badge/RimWorld-1.3%20%E2%80%93%201.7-22c55e?style=for-the-badge&logo=steam&logoColor=white)](https://github.com/ignxo/OmniThread-Ultimate/releases/latest)
+[![Thread Safety](https://img.shields.io/badge/Concurrency%20Exceptions-0%20(25k%2B%20Ticks)-10b981?style=for-the-badge)](Benchmarks/benchmark_25k_active_player.json)
+[![Save Game Safe](https://img.shields.io/badge/Save%20Files-100%25%20Safe-a855f7?style=for-the-badge)](#-100-save-game-safe-add-or-remove-anytime)
+[![RimPy & RimSort](https://img.shields.io/badge/RimPy%20%26%20RimSort-Auto--Sort%20Ready-f59e0b?style=for-the-badge)](#-built-in-mod-compatibility--rimpy--rimsort-auto-sorting)
+[![License: MIT](https://img.shields.io/badge/License-MIT-64748b?style=for-the-badge)](LICENSE)
+
 <p align="center">
-  <img src="About/Preview.png" alt="OmniThread Ultimate — Lock-Free Multi-Threaded Engine for RimWorld" width="100%" />
+  <a href="#-verified-live-benchmarks"><b>⚡ Benchmarks</b></a> &nbsp;&bull;&nbsp;
+  <a href="#-how-to-install"><b>🚀 Quick Install</b></a> &nbsp;&bull;&nbsp;
+  <a href="#-key-architecture--features"><b>🧠 Architecture</b></a> &nbsp;&bull;&nbsp;
+  <a href="#-built-in-mod-compatibility--rimpy--rimsort-auto-sorting"><b>🧩 Mod Compatibility (60+)</b></a> &nbsp;&bull;&nbsp;
+  <a href="#-in-game-controls--monitoring"><b>🎮 In-Game HUD (F10)</b></a>
 </p>
 
-# OmniThread Ultimate — Lock-Free Multi-Threaded Engine for RimWorld (1.3 – 1.7)
-
-**OmniThread Ultimate** is a high-performance C# (Harmony) multi-threading and frame-pacing engine for **RimWorld (1.3, 1.4, 1.5, 1.6, and 1.7)**. It parallelizes RimWorld's core simulation loop (`TickList.Tick()`, `Pawn.DoTick()`, `Pawn_NeedsTracker`, `AttackTargetsCache`, and `MapPostTick`) across all logical CPU cores while maintaining **100% deterministic memory safety (`caughtConcurrencyExceptions: 0`)**, **smooth camera frame pacing**, and **complete save-game compatibility**.
+</div>
 
 ---
 
-## Key Architecture & Features
+**OmniThread Ultimate** is a high-performance C# (Harmony) multi-threading and frame-pacing engine for **RimWorld (`1.3`, `1.4`, `1.5`, `1.6`, and `1.7`)**. It parallelizes RimWorld's core simulation loop (`TickList.Tick()`, `Pawn.DoTick()`, `Pawn_NeedsTracker`, `AttackTargetsCache`, and `MapPostTick`) across all logical CPU cores while maintaining **100% deterministic memory safety (`caughtConcurrencyExceptions: 0`)**, **buttery-smooth 60–240 Hz camera frame pacing**, and **complete save-game compatibility**.
+
+| 🏎️ **+109.2% Compute TPS** | 🛡️ **0 Race Conditions** | 💾 **Zero Save Footprint** | 🧩 **60+ Mod Profiles** |
+| :--- | :--- | :--- | :--- |
+| **4.51x faster median tick (`p50`)** and **2.06x real wall-clock TPS** in heavy 291-pawn combat. | Verified across **25,000+ continuous ticks** (`16.36M` parallel `DoTick` calls & `1.42M` synced ops). | Uses pure runtime Harmony patches. **Add or remove mid-playthrough** without corrupting `.rws` saves. | Native support for **RocketMan**, **CAI-5000**, **Combat Extended**, **VEF**, **Vehicle Framework**, and **RimPy**. |
+
+---
+
+## ⚡ Verified Live Benchmarks
+
+All benchmarks were captured on **AMD Ryzen 5 5600 (6 Cores / 12 Logical Threads)** inside live `RimWorldWin64.exe` combat colonies. Raw telemetry logs are available in the [`Benchmarks/`](Benchmarks/) directory.
+
+### Visual Throughput Comparison (RimWorld 1.6 + 5 DLCs, ~291 Active Pawns)
+
+```text
+Compute TPS (DoSingleTick) — Higher is Better
+──────────────────────────────────────────────────────────────────────────────
+12 Threads (OmniThread)  ████████████████████████████████████████  341.02 TPS (+109.2%)
+ 1 Thread  (Vanilla)     ███████████████████░░░░░░░░░░░░░░░░░░░░░  162.99 TPS
+
+TickList Compute TPS — Higher is Better
+──────────────────────────────────────────────────────────────────────────────
+12 Threads (OmniThread)  ████████████████████████████████████████  402.44 TPS (+127.4%)
+ 1 Thread  (Vanilla)     ██████████████████░░░░░░░░░░░░░░░░░░░░░░  177.00 TPS
+
+Wall-Clock TPS (Real-Time Speed) — Higher is Better
+──────────────────────────────────────────────────────────────────────────────
+12 Threads (OmniThread)  ████████████████████████████████████████  245.96 TPS (2.06x)
+ 1 Thread  (Vanilla)     ███████████████████░░░░░░░░░░░░░░░░░░░░░  119.60 TPS
+
+Median Tick Latency (p50 ms) — Lower is Better
+──────────────────────────────────────────────────────────────────────────────
+12 Threads (OmniThread)  █████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   1.12 ms   (4.51x faster)
+ 1 Thread  (Vanilla)     ████████████████████████████████████████   5.04 ms
+```
+
+### 1. RimWorld 1.6 + 5 Official DLCs (~291 Active Pawns in Combat, 3,000 Ticks)
+
+| Configuration | Avg Tick Time (`avgMsPerTick`) | Median Tick (`p50`) | Compute TPS (`DoSingleTick`) | `TickList` Compute TPS | Wall-Clock TPS | Concurrency Exceptions |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1 Thread (Vanilla Baseline)** | `6.1355 ms` | `5.0419 ms` | `162.99 TPS` | `~177.0 TPS` | `119.60 TPS` | `0` |
+| **12 Threads (`OmniThread Ultimate`)** | **`2.9323 ms`** | **`1.1169 ms` (4.51x)** | **`341.02 TPS` (+109.2%)** | **`402.44 TPS` (+127.4%)** | **`245.96 TPS` (2.06x)** | **`0`** |
+
+### 2. Heavy 57-Mod Combat Stress Test (50 Mods + 5 DLCs — `CE` + `CAI-5000` + `RocketMan` + `VEF` + `Zoology`, ~268 Pawns, 3,000 Ticks)
+
+| Configuration | Avg Tick Time | Median Tick (`p50`) | Min Tick Time | Compute TPS | `TickList` TPS | Wall-Clock TPS | Active Threads | Concurrency Exceptions |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1 Thread (57 Mods Baseline)** | `11.2229 ms` | `7.7636 ms` | `3.4217 ms` | `89.10 TPS` | `104.85 TPS` | `64.09 TPS` | `1 / 12` | `0` |
+| **12 Threads (`OmniThread Ultimate`)** | **`8.06–8.54 ms`** | **`4.70–5.17 ms` (+50–65%)** | **`1.43 ms` (2.39x)** | **`117–124 TPS` (+31–39%)** | **`142–160 TPS` (+36–53%)** | **`85.2–91.3 TPS` (+33–42%)** | **`12.00 / 12`** | **`0`** |
+
+### 3. 25,000-Tick Active Player Endurance Stress Test (382 Pawns on Map)
+Verified on a live 382-pawn colony over **25,000 continuous ticks** ([`Benchmarks/benchmark_25k_active_player.json`](Benchmarks/benchmark_25k_active_player.json)) while actively executing simulated player actions (`189` camera movements/zooms, `103` UI inspector tab switches, `258` combat draft/undraft orders, `250` designations, `206` blueprint/zone edits, `127` work/schedule changes, and `9` forced Storyteller raids/incidents):
+
+| Metric | Verified Result |
+| :--- | :--- |
+| **Total Continuous Ticks Verified** | **`25,000` ticks** |
+| **Spawned Pawns on Map** | **`382` pawns** |
+| **Parallel `Thing.DoTick()` Executions** | **`16,362,869`** |
+| **Synchronized `MainThreadSyncQueue` Operations** | **`1,420,154` enqueued / `1,420,154` flushed (100%)** |
+| **Prevented Multi-Thread Hazards** | **`1,421,099`** |
+| **Median Tick Time (`p50`) / Compute TPS** | **`3.34 ms` (`198.91 TPS` overall / `328.86 TPS` TickList)** |
+| **Concurrency / Player Action Exceptions** | **`0` (`100% Error-Free`)** |
+
+---
+
+## 🚀 How to Install
+
+> [!IMPORTANT]
+> **Requirement:** Make sure you have **[Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)** installed and placed at the **very top** of your mod list (above `Core`).
+
+### Quick Install (30 Seconds)
+1. **Download:** Grab **[`OmniThreadUltimate-v1.6.0.0.zip`](https://github.com/ignxo/OmniThread-Ultimate/releases/latest)** from Releases (or click **`<> Code` -> `Download ZIP`**).
+2. **Extract:** Unpack the folder into your `RimWorld/Mods/` directory so the structure looks like `RimWorld/Mods/OmniThreadUltimate/About/About.xml`.
+3. **Load Order:** Enable **OmniThread Ultimate** and place it at the **very bottom** of your mod list (or click **Sort** in **RimPy** / **RimSort**).
+
+<details>
+<summary><b>📂 Click to expand: Detailed Step-by-Step Guide (Browser, Git, PowerShell, Folder Structure & RimPy)</b></summary>
+<br>
+
+#### Step 1: Download the Mod
+- **Option 1 — From Browser (No commands needed):**
+  - Go to [**Releases (v1.6.0.0)**](https://github.com/ignxo/OmniThread-Ultimate/releases/latest) and download **`OmniThreadUltimate-v1.6.0.0.zip`**, or click the green **`<> Code`** button at the top-right and select **`Download ZIP`**.
+- **Option 2 — Via Command Line (`git clone` or PowerShell):**
+  Open a terminal inside your `RimWorld/Mods` folder and run:
+  ```bash
+  git clone https://github.com/ignxo/OmniThread-Ultimate.git OmniThreadUltimate
+  ```
+  Or with PowerShell (no Git required):
+  ```powershell
+  Invoke-WebRequest -Uri "https://github.com/ignxo/OmniThread-Ultimate/releases/download/v1.6.0.0/OmniThreadUltimate-v1.6.0.0.zip" -OutFile "$env:TEMP\OmniThreadUltimate.zip"; Expand-Archive -Path "$env:TEMP\OmniThreadUltimate.zip" -DestinationPath "." -Force
+  ```
+
+#### Step 2: Verify Folder Structure inside `RimWorld/Mods`
+- **Steam (Windows):** `C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods`
+- **GOG / Standalone:** `<Your RimWorld Folder>\Mods`
+
+Make sure `About`, `Assemblies`, and `LoadFolders.xml` are directly inside `Mods/OmniThreadUltimate/`:
+```text
+RimWorld/
+├── RimWorldWin64.exe
+└── Mods/
+    └── OmniThreadUltimate/          <-- Mod folder inside Mods/
+        ├── About/
+        │   ├── About.xml
+        │   ├── Manifest.xml
+        │   └── Preview.png
+        ├── Assemblies/
+        │   └── OmniThreadUltimate.dll
+        └── LoadFolders.xml
+```
+
+#### Step 3: Enable in RimPy / RimSort or In-Game Mod Menu
+- **Using RimPy / RimSort (Recommended):**
+  1. Drag **OmniThread Ultimate** from **Inactive** to **Active**.
+  2. Ensure **Harmony** is active at the top of the list.
+  3. Click **Sort** — RimPy/RimSort automatically places **OmniThread Ultimate** at the bottom (below *RocketMan*, *CAI-5000*, and *Combat Extended*).
+  4. Click **Save** and **Run**.
+- **Using the In-Game Mod Menu:**
+  1. Launch `RimWorldWin64.exe` and open **Mods**.
+  2. Enable **Harmony** at the top (above `Core`).
+  3. Enable **OmniThread Ultimate** at the **very bottom** of your active list and click **Close**.
+
+</details>
+
+---
+
+## 🎮 In-Game Controls & Monitoring
+
+- **Zero Configuration Needed:** Multi-threading (**all logical CPU threads**) and **Auto-Hz Frame Pacing** activate **100% automatically** as soon as you load a save or start a new colony.
+- **Live FPS / TPS & Thread HUD (`F10`):** Press **`F10`** at any time while playing on a map to toggle the top-left **OmniThread Ultimate** telemetry overlay (displays live TPS, tick execution time in `ms`, and active worker threads).
+- **Mod Settings Menu:** Customize worker thread limits, speed uncapping, and startup HUD visibility under **Options -> Mod Settings -> OmniThread Ultimate**.
+
+---
+
+## 🧠 Key Architecture & Features
+
+```mermaid
+flowchart LR
+    A["TickManager.DoSingleTick\n(Auto-Hz Frame Pacer)"] --> B["LPT Interleaved Queue\n(Pawns + Things)"]
+    B --> C1["Worker #01..#04\n[ThreadStatic] BFS & RNG"]
+    B --> C2["Worker #05..#08\n[ThreadStatic] BFS & RNG"]
+    B --> C3["Worker #09..#12\n[ThreadStatic] BFS & RNG"]
+    C1 & C2 & C3 --> D["MainThreadSyncQueue\n(Deterministic FIFO Flush)"]
+    D --> E["60–240 Hz Smooth Render\n(0 Concurrency Exceptions)"]
+```
 
 ### 1. Dedicated Persistent Worker Pool (`OmniThread_Worker`) + Atomic Work-Stealing
 - **Zero ThreadPool Starvation:** Instead of relying on standard `Parallel.For` range partitioning (which suffers from severe tail-skew because RimWorld appends heavy `Pawn` instances at the very end of `TickList` buckets), OmniThread Ultimate maintains persistent background threads synchronized via low-overhead `ManualResetEventSlim` barriers.
@@ -31,136 +192,48 @@
 - **Zero Save File Footprint:** OmniThread Ultimate operates strictly at runtime via Harmony patches and does **not** inject custom `ThingComp`, `MapComponent`, `WorldComponent`, or XML `Defs` into your `.rws` save files.
 - **Safe Mid-Playthrough Installation & Removal:** You can enable it on an existing late-game colony or disable/remove it at any time without corrupting your save or losing progress.
 
-### 6. Built-In Mod Compatibility & RimPy / RimSort Auto-Sorting
-- **RimPy Mod Manager & RimSort Ready:** Includes complete `<loadAfter>` rules in `About/About.xml` and `About/Manifest.xml` so clicking **Sort** in **RimPy** or **RimSort** automatically places **OmniThread Ultimate** in the optimal load order position.
-- **Dedicated Profiles for 60+ Popular Mods:**
-  - **RocketMan (`vr.missilegirl`)** — Lock-free parallel bypasses for `StatWorker_Patch`, `SignatureUtility`, and `GenTemperature_Patch`, plus automatic deduplication of `WorldPawns` time dilation.
-  - **CAI-5000 / CombatAI (`Krkr.rule56`)** — Main-thread `CompCache` pre-warming (guaranteeing 100% lock-free `TryGetValue` cache hits on worker threads) and thread-safe synchronization for `SightTracker`, `AvoidanceTracker`, `CoverPositionFinder`, `RegionFlooder`, and `CellFlooder`.
-  - **Combat Extended (`CETeam.CombatExtended`)** — Safe main-thread routing for ballistic `ProjectileCE` trajectories and thread-safe `LightingTracker` synchronization.
-  - **Vehicle Framework (`SmashPhil.VehicleFramework`)** & **Vanilla Vehicles Expanded** — Safe main-thread routing for multi-cell `VehiclePawn` instances.
-  - **Vanilla Expanded Framework (`VEF`)**, **Vanilla Psycasts Expanded**, **Vanilla Social Interactions Expanded**, **Vanilla Memes Expanded**.
-  - **Zoology Mod**, **RunAndGun**, **Simple Sidearms**, **Pick Up And Haul**, **CommonSense**, **Smart Medicine**, **Allow Tool**, **Hospitality**, **Dubs Bad Hygiene**, **Performance Optimizer**.
+---
+
+## 🧩 Built-In Mod Compatibility & RimPy / RimSort Auto-Sorting
+
+- **RimPy Mod Manager & RimSort Ready:** Includes complete `<loadAfter>` rules in [`About/About.xml`](About/About.xml) and [`About/Manifest.xml`](About/Manifest.xml) so clicking **Sort** in **RimPy** or **RimSort** automatically places **OmniThread Ultimate** in the optimal load order position.
 - **Universal Harmony Auto-Guard (`ScanAndProtectThirdPartyModHooks`):** Automatically inspects all loaded third-party Harmony `Prefix`/`Postfix` hooks attached to RimWorld's core tick methods at startup and wraps unguarded third-party mod callbacks in re-entrant synchronization (`|L| = 1`, mathematically eliminating AB-BA deadlocks).
 - **Resilient Cross-Version Patching (`1.3` / `1.4` / `1.5` / `1.6` / `1.7`):** Dynamically adapts to API differences across RimWorld versions (`HealthTick` vs `HealthTickInterval`, `PathFinder.FindPath` vs `FindPathNow`).
 
----
+### Flagship Compatibility Profiles
 
-## Verified Live Benchmarks (AMD Ryzen 5 5600 — 6 Cores / 12 Threads)
+| Mod | Package ID | Multi-Thread Integration Strategy |
+| :--- | :--- | :--- |
+| **RocketMan** | `vr.missilegirl` | Lock-free parallel bypasses for `StatWorker_Patch`, `SignatureUtility`, and `GenTemperature_Patch` + `WorldPawns` time-dilation deduplication. |
+| **CAI-5000 (CombatAI)** | `Krkr.rule56` | Main-thread `CompCache` pre-warming (100% lock-free `TryGetValue` cache hits on workers) + thread-safe `SightTracker`, `AvoidanceTracker`, `CoverPositionFinder`, `RegionFlooder`, and `CellFlooder`. |
+| **Combat Extended** | `CETeam.CombatExtended` | Safe main-thread routing for ballistic `ProjectileCE` trajectories and thread-safe `LightingTracker` synchronization. |
+| **Vehicle Framework** | `SmashPhil.VehicleFramework` | Safe main-thread routing for multi-cell `VehiclePawn` movement and collision grids. |
+| **Vanilla Expanded (`VEF`)** | `OskarPotocki.VanillaFactionsExpanded.Core` | Built-in concurrency guards for `Vanilla Psycasts Expanded`, `Vanilla Social Interactions Expanded`, `Vanilla Memes Expanded`, and `VEF` subsystems. |
 
-### 1. 25,000-Tick Active Player Endurance Stress Test (382 Pawns on Map)
-Verified on a live 382-pawn colony over **25,000 continuous ticks** (`Benchmarks/benchmark_25k_active_player.json`) while actively executing simulated player actions (189 camera movements/zooms, 103 UI inspector tab switches, 258 combat draft/undraft orders, 250 designations, 206 blueprint/zone edits, 127 work/schedule changes, and 9 forced Storyteller raids/incidents):
+<details>
+<summary><b>📋 Click to view additional pre-configured mod profiles (60+ supported mods)</b></summary>
+<br>
 
-| Metric | Verified Result |
-| :--- | :--- |
-| **Total Continuous Ticks Verified** | **`25,000` ticks** |
-| **Spawned Pawns on Map** | **`382` pawns** |
-| **Parallel `Thing.DoTick()` Executions** | **`16,362,869`** |
-| **Synchronized `MainThreadSyncQueue` Operations** | **`1,420,154` enqueued / `1,420,154` flushed (100%)** |
-| **Prevented Multi-Thread Hazards** | **`1,421,099`** |
-| **Median Tick Time (`p50`) / Compute TPS** | **`3.34 ms` (`198.91 TPS` overall / `328.86 TPS` TickList)** |
-| **Concurrency / Player Action Exceptions** | **`0` (`100% Error-Free`)** |
+- **Performance & AI:** *Performance Optimizer*, *Performance Fish*, *Dubs Performance Analyzer*, *Search and Destroy*, *Achtung!*, *Defensive Positions*.
+- **Combat & Gear:** *RunAndGun*, *Simple Sidearms*, *Yayo's Combat 3*, *Gunplay*, *Dual Wield*, *Giddy-up! 2*.
+- **Hauling, Work & AI Jobs:** *Pick Up And Haul*, *While You're Up*, *CommonSense*, *Smart Medicine*, *Allow Tool*, *Share The Load*, *QualityBuilder*, *Replace Stuff*.
+- **Colony & Immersion:** *Dubs Bad Hygiene*, *Hospitality*, *Zoology Mod*, *SpeakUp*, *Interaction Bubbles*, *Wall Light*, *Deep Storage (LWM)*, *RimHUD*, *Numbers*, *Camera+*.
 
-### 2. RimWorld 1.6 + 5 Official DLCs (~291 Active Pawns in Combat, 3,000 Ticks)
-
-| Configuration | Avg Tick Time (`avgMsPerTick`) | Median Tick (`p50`) | Compute TPS (`DoSingleTick`) | `TickList` Compute TPS | Wall-Clock TPS | Concurrency Exceptions |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1 Thread (Vanilla Baseline)** | `6.1355 ms` | `5.0419 ms` | `162.99 TPS` | `~177.0 TPS` | `119.60 TPS` | `0` |
-| **12 Threads (`OmniThread Ultimate`)** | **`2.9323 ms`** | **`1.1169 ms` (4.51x)** | **`341.02 TPS` (+109.2%)** | **`402.44 TPS` (+127.4%)** | **`245.96 TPS` (2.06x)** | **`0`** |
-
-### 3. Heavy 57-Mod Combat Stress Test (50 Mods + 5 DLCs — `CE` + `CAI-5000` + `RocketMan` + `VEF` + `Zoology`, ~268 Pawns, 3,000 Ticks)
-
-| Configuration | Avg Tick Time | Median Tick (`p50`) | Min Tick Time | Compute TPS | `TickList` TPS | Wall-Clock TPS | Active Threads | Concurrency Exceptions |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1 Thread (57 Mods Baseline)** | `11.2229 ms` | `7.7636 ms` | `3.4217 ms` | `89.10 TPS` | `104.85 TPS` | `64.09 TPS` | `1 / 12` | `0` |
-| **12 Threads (`OmniThread Ultimate`)** | **`8.06–8.54 ms`** | **`4.70–5.17 ms` (+50–65%)** | **`1.43 ms` (2.39x)** | **`117–124 TPS` (+31–39%)** | **`142–160 TPS` (+36–53%)** | **`85.2–91.3 TPS` (+33–42%)** | **`12.00 / 12`** | **`0`** |
+</details>
 
 ---
 
-## How to Install (Step-by-Step Guide)
+## 📁 Repository Structure
 
-> [!IMPORTANT]
-> **Requirement:** Make sure you have the **[Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)** mod installed and placed at the **very top** of your mod list (above `Core`).
-
-### Step 1: Download the Mod
-Choose **whichever method you prefer**:
-
-#### Option 1: Download `.zip` from Browser (No commands needed)
-- **From Releases (Recommended):** Go to [**Releases (v1.6.0.0)**](https://github.com/ignxo/OmniThread-Ultimate/releases/latest) on the right side of this page and download **`OmniThreadUltimate-v1.6.0.0.zip`**.
-- **Or via Green Button:** Click the green **`<> Code`** button at the top-right of this page and click **`Download ZIP`**.
-
-#### Option 2: Download via Command Line (`git clone` or PowerShell)
-Open a terminal (**CMD** / **PowerShell** / **Git Bash**) inside your `RimWorld/Mods` folder and run:
-
-- **Using Git:**
-  ```bash
-  git clone https://github.com/ignxo/OmniThread-Ultimate.git OmniThreadUltimate
-  ```
-
-- **Using PowerShell (without Git):**
-  ```powershell
-  Invoke-WebRequest -Uri "https://github.com/ignxo/OmniThread-Ultimate/releases/download/v1.6.0.0/OmniThreadUltimate-v1.6.0.0.zip" -OutFile "$env:TEMP\OmniThreadUltimate.zip"; Expand-Archive -Path "$env:TEMP\OmniThreadUltimate.zip" -DestinationPath "." -Force
-  ```
+- [`About/About.xml`](About/About.xml) & [`About/Manifest.xml`](About/Manifest.xml) — Mod metadata and load-order rules for **RimPy**, **RimSort**, and **Mod Manager**.
+- [`About/Preview.png`](About/Preview.png) — High-DPI mod preview banner for GitHub and the in-game Mod Menu.
+- [`LoadFolders.xml`](LoadFolders.xml) — Multi-version folder mapping for RimWorld `1.3`, `1.4`, `1.5`, `1.6`, and `1.7`.
+- [`Assemblies/OmniThreadUltimate.dll`](Assemblies/OmniThreadUltimate.dll) — Compiled release assembly.
+- [`Source/OmniThreadUltimate/`](Source/OmniThreadUltimate/) — Full C# source code (`ParallelTickEngine.cs`, `ModCompatibilityManager.cs`, `MainThreadSyncQueue.cs`, `OmniThreadMod.cs`, `OmniThreadGUI.cs`, `AutoBenchmarkRunner.cs`, `SpatialPartitioner.cs`).
+- [`Benchmarks/`](Benchmarks/) — Verified JSON benchmark reports captured from live `RimWorldWin64.exe` runs (including [`benchmark_25k_active_player.json`](Benchmarks/benchmark_25k_active_player.json)).
 
 ---
 
-### Step 2: Unpack into your RimWorld `Mods` Folder
-1. Open the folder where your **RimWorld** is installed and open the **`Mods`** subfolder:
-   - **Steam (Windows):** `C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods`
-   - **GOG / Standalone / Portable:** `<Your RimWorld Folder>\Mods` *(the same folder where `RimWorldWin64.exe` is located -> open `Mods`)*
-2. Extract the downloaded `.zip` archive into the **`Mods`** folder.
-3. **Check the folder structure!** Inside `RimWorld/Mods/OmniThreadUltimate`, you must directly see the `About` folder, `Assemblies` folder, and `LoadFolders.xml`:
-
-```text
-RimWorld/
-├── RimWorldWin64.exe
-└── Mods/
-    └── OmniThreadUltimate/          <-- Mod folder inside Mods/
-        ├── About/
-        │   ├── About.xml
-        │   ├── Manifest.xml
-        │   └── Preview.png
-        ├── Assemblies/
-        │   └── OmniThreadUltimate.dll
-        └── LoadFolders.xml
-```
-
----
-
-### Step 3: Enable the Mod (RimPy or In-Game Menu)
-
-#### Option A: Using RimPy Mod Manager / RimSort (Recommended)
-1. Open **RimPy** (or **RimSort**).
-2. Find **OmniThread Ultimate** in the **Inactive** list (left side) and drag it to the **Active** list (right side).
-3. Make sure **Harmony** is also in the **Active** list at the very top.
-4. Click **Sort** — RimPy will automatically place **OmniThread Ultimate** at the **very bottom** of your mod list (below *RocketMan*, *CAI-5000*, and *Combat Extended*).
-5. Click **Save**, then click **Run**!
-
-#### Option B: Using the Standard In-Game Mod Menu (No RimPy)
-1. Launch `RimWorldWin64.exe` and click **Mods** in the main menu.
-2. Enable **Harmony** (place it at the very top, above `Core`).
-3. Enable **OmniThread Ultimate** and drag it to the **very bottom** of your active mods list (last mod on the list).
-4. Click **Close** — the game will automatically restart with the mod loaded.
-
----
-
-### Step 4: How to Use In-Game
-- **Zero configuration needed:** Multi-threading (**all CPU threads**) and **Auto-Hz Frame Pacing** turn on **100% automatically** as soon as you load a save or start a new colony.
-- **Mod Settings Menu:** You can customize thread count limits, max speed uncapping, and startup HUD visibility under **Options -> Mod Settings -> OmniThread Ultimate** (settings are automatically saved across sessions).
-- **Live FPS / TPS & Thread Monitor (`F10`):** While playing on a map, press **`F10`** on your keyboard at any time to open or hide the **OmniThread Ultimate** status window in the top-left corner (shows live TPS, tick time in `ms`, and active CPU threads).
-
----
-
-## Repository Structure
-
-- `About/About.xml` & `About/Manifest.xml` — Mod metadata and load-order rules for **RimPy**, **RimSort**, and **Mod Manager**.
-- `About/Preview.png` — Mod preview banner for GitHub and in-game Mod Menu.
-- `LoadFolders.xml` — Multi-version folder mapping for RimWorld `1.3`, `1.4`, `1.5`, `1.6`, and `1.7`.
-- `Assemblies/OmniThreadUltimate.dll` — Compiled release assembly.
-- `Source/OmniThreadUltimate/` — Full C# source code (`ParallelTickEngine.cs`, `ModCompatibilityManager.cs`, `MainThreadSyncQueue.cs`, `OmniThreadMod.cs`, `OmniThreadGUI.cs`, `AutoBenchmarkRunner.cs`, `SpatialPartitioner.cs`).
-- `Benchmarks/` — Verified JSON benchmark reports captured from live `RimWorldWin64.exe` runs (including `benchmark_25k_active_player.json`).
-
----
-
-## License
+## 📄 License
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
