@@ -22,10 +22,19 @@ namespace OmniThreadUltimate
             Scribe_Values.Look(ref UncapMaxTimeSpeed, "UncapMaxTimeSpeed", true);
             Scribe_Values.Look(ref MaxWorkerThreads, "MaxWorkerThreads", 0);
             Scribe_Values.Look(ref ShowOverlayOnStartup, "ShowOverlayOnStartup", false);
+            if (MaxWorkerThreads < 0)
+            {
+                MaxWorkerThreads = 0;
+            }
         }
 
         public void ApplyToRuntime()
         {
+            if (MaxWorkerThreads < 0)
+            {
+                MaxWorkerThreads = 0;
+            }
+
             if (!AutoBenchmarkRunner.IsAutoTestMode)
             {
                 OmniThreadMod.EnableMultithreading = EnableMultithreading;
@@ -44,11 +53,11 @@ namespace OmniThreadUltimate
         {
             try
             {
+                // IMPORTANT: Do NOT call Settings.ApplyToRuntime() or access OmniThreadMod here!
+                // LoadedModManager.CreateModClasses() runs on a background thread before Unity graphics
+                // and [StaticConstructorOnStartup] are ready. Accessing OmniThreadMod here would prematurely
+                // trigger OmniThreadMod's static constructor on the background loading thread.
                 Settings = GetSettings<OmniThreadModSettings>();
-                if (Settings != null)
-                {
-                    Settings.ApplyToRuntime();
-                }
             }
             catch
             {

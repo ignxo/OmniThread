@@ -102,6 +102,10 @@ namespace OmniThreadUltimate
             {
                 dop = maxCores;
             }
+            if (OmniThreadMod.MaxWorkerThreads > 0)
+            {
+                dop = Math.Max(1, Math.Min(dop, OmniThreadMod.MaxWorkerThreads));
+            }
             ParallelOptions opts = new ParallelOptions();
             opts.MaxDegreeOfParallelism = dop;
             return opts;
@@ -426,6 +430,7 @@ namespace OmniThreadUltimate
         private static volatile int Iter5CurrentTicksGame = 0;
         private static volatile bool Iter5CurrentIsNormalTick = false;
         private static int Iter5PendingWorkers = 0;
+        private static int Iter5DispatchGeneration = 0;
 
         private static void EnsureDedicatedWorkersInitialized(int desiredBgWorkers)
         {
@@ -433,16 +438,31 @@ namespace OmniThreadUltimate
             {
                 return;
             }
-            MaxBackgroundWorkers = desiredBgWorkers;
-            WorkerWakeEvents = new ManualResetEventSlim[desiredBgWorkers];
-            WorkerTargetGen = new int[desiredBgWorkers];
-            DedicatedWorkers = new Thread[desiredBgWorkers];
-            WorkerCurrentThing = new Thing[desiredBgWorkers + 1];
-            WorkerIsBusy = new bool[desiredBgWorkers + 1];
-            for (int i = 0; i < desiredBgWorkers; i++)
+            lock (GlobalSyncLock)
             {
-                WorkerWakeEvents[i] = new ManualResetEventSlim(false, 2047);
-                SpawnDedicatedWorkerThread(i);
+                if (DedicatedWorkers != null || desiredBgWorkers <= 0)
+                {
+                    return;
+                }
+                MaxBackgroundWorkers = desiredBgWorkers;
+                WorkerWakeEvents = new ManualResetEventSlim[desiredBgWorkers];
+                WorkerTargetGen = new int[desiredBgWorkers];
+                WorkerCurrentThing = new Thing[desiredBgWorkers + 1];
+                WorkerIsBusy = new bool[desiredBgWorkers + 1];
+                Thread[] workers = new Thread[desiredBgWorkers];
+                for (int i = 0; i < desiredBgWorkers; i++)
+                {
+                    WorkerWakeEvents[i] = new ManualResetEventSlim(false, 2047);
+                    Thread t = new Thread(DedicatedWorkerThreadProc);
+                    t.Name = "OmniThread_Worker_" + (i + 1);
+                    t.IsBackground = true;
+                    workers[i] = t;
+                }
+                Volatile.Write(ref DedicatedWorkers, workers);
+                for (int i = 0; i < desiredBgWorkers; i++)
+                {
+                    workers[i].Start(i);
+                }
             }
         }
 
@@ -476,8 +496,6 @@ namespace OmniThreadUltimate
                             {
                                 wakeEvent.Wait();
                                 wakeEvent.Reset();
-                                targetGen = Volatile.Read(ref WorkerTargetGen[workerIdx]);
-                                break;
                             }
                         }
                     }
@@ -495,7 +513,10 @@ namespace OmniThreadUltimate
                     catch (ThreadAbortException)
                     {
                         Thing stuck = WorkerCurrentThing != null && workerIdx < WorkerCurrentThing.Length ? WorkerCurrentThing[workerIdx] : null;
-                        WorkerCurrentThing[workerIdx] = null;
+                        if (WorkerCurrentThing != null && workerIdx < WorkerCurrentThing.Length)
+                        {
+                            WorkerCurrentThing[workerIdx] = null;
+                        }
                         Thread.ResetAbort();
                         if (stuck != null)
                         {
@@ -516,9 +537,12 @@ namespace OmniThreadUltimate
                         {
                             WorkerIsBusy[workerIdx] = false;
                         }
-                        if (Interlocked.Decrement(ref Iter5PendingWorkers) <= 0)
+                        if (targetGen == Volatile.Read(ref Iter5DispatchGeneration))
                         {
-                            Iter5DoneEvent.Set();
+                            if (Interlocked.Decrement(ref Iter5PendingWorkers) <= 0)
+                            {
+                                Iter5DoneEvent.Set();
+                            }
                         }
                     }
                 }
@@ -739,9 +763,12 @@ namespace OmniThreadUltimate
             }
 
             int ticksGame = Find.TickManager.TicksGame;
-            int configuredCap = OmniThreadMod.MaxWorkerThreads > 0 ? OmniThreadMod.MaxWorkerThreads : Math.Max(2, Environment.ProcessorCount);
-            int optimalWorkers = Math.Max(2, Math.Min(configuredCap, Environment.ProcessorCount));
-            int maxDop = parallelOptions.MaxDegreeOfParallelism > 0 ? Math.Min(parallelOptions.MaxDegreeOfParallelism, optimalWorkers) : optimalWorkers;
+            int optimalWorkers = OmniThreadMod.MaxWorkerThreads > 0
+                ? Math.Max(1, Math.Min(OmniThreadMod.MaxWorkerThreads, Environment.ProcessorCount))
+                : Math.Max(2, Environment.ProcessorCount);
+            int maxDop = (parallelOptions != null && parallelOptions.MaxDegreeOfParallelism > 0)
+                ? Math.Min(parallelOptions.MaxDegreeOfParallelism, optimalWorkers)
+                : optimalWorkers;
             EnsureDedicatedWorkersInitialized(Math.Max(2, Environment.ProcessorCount));
 
             int numWorkers = Math.Min(maxDop, (workCount + 3) >> 2);
@@ -762,6 +789,7 @@ namespace OmniThreadUltimate
             {
                 if (bgWorkersToWake > 0)
                 {
+                    int dispatchGen = Interlocked.Increment(ref Iter5DispatchGeneration);
                     Iter5PendingWorkers = bgWorkersToWake;
                     Iter5DoneEvent.Reset();
                     for (int w = 0; w < bgWorkersToWake; w++)
@@ -770,7 +798,7 @@ namespace OmniThreadUltimate
                         {
                             SpawnDedicatedWorkerThread(w);
                         }
-                        Interlocked.Increment(ref WorkerTargetGen[w]);
+                        Volatile.Write(ref WorkerTargetGen[w], dispatchGen);
                         WorkerWakeEvents[w].Set();
                     }
                 }
@@ -814,6 +842,7 @@ namespace OmniThreadUltimate
                             }
                         }
                         Iter5DoneEvent.Wait(300);
+                        Interlocked.Increment(ref Iter5DispatchGeneration);
                         Interlocked.Exchange(ref Iter5PendingWorkers, 0);
                         for (int w = 0; w < bgWorkersToWake; w++)
                         {
@@ -1532,6 +1561,245 @@ namespace OmniThreadUltimate
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
         {
             return Patch_Pawn_HealthTracker_HealthTickInterval.Transpiler(instructions);
+        }
+
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.HealthTrackerLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.HealthTrackerLock);
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    public static class Patch_HediffSet_And_Damage_Lock
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodInfo takeDamage = AccessTools.Method(typeof(Thing), "TakeDamage");
+            if (takeDamage != null)
+            {
+                yield return takeDamage;
+            }
+
+            string[] htNames = new string[]
+            {
+                "AddHediff",
+                "CheckForStateChange",
+                "MakeDowned",
+                "PreApplyDamage",
+                "PostApplyDamage",
+                "SetDead",
+                "Notify_HediffChanged"
+            };
+            MethodInfo[] htMethods = typeof(Pawn_HealthTracker).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < htMethods.Length; i++)
+            {
+                MethodInfo m = htMethods[i];
+                if (m != null && !m.IsAbstract && !m.IsGenericMethod)
+                {
+                    for (int j = 0; j < htNames.Length; j++)
+                    {
+                        if (m.Name == htNames[j])
+                        {
+                            yield return m;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            string[] hsNames = new string[]
+            {
+                "AddDirect",
+                "DirtyCache",
+                "CacheMissingPartsCommonAncestors",
+                "GetMissingPartsCommonAncestors",
+                "PartOrAnyAncestorHasDirectlyAddedParts",
+                "HasDirectlyAddedPartFor",
+                "GetInjuredParts",
+                "GetNaturallyHealingInjuredParts",
+                "GetPartHealth"
+            };
+            MethodInfo[] hsMethods = typeof(HediffSet).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < hsMethods.Length; i++)
+            {
+                MethodInfo m = hsMethods[i];
+                if (m != null && !m.IsAbstract && !m.IsGenericMethod)
+                {
+                    for (int j = 0; j < hsNames.Length; j++)
+                    {
+                        if (m.Name == hsNames[j])
+                        {
+                            yield return m;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.HealthTrackerLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.HealthTrackerLock);
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    public static class Patch_Pawn_CarryTracker_TryDropCarriedThing
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodInfo[] methods = typeof(Pawn_CarryTracker).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < methods.Length; i++)
+            {
+                MethodInfo m = methods[i];
+                if (m != null && m.Name == "TryDropCarriedThing" && !m.IsAbstract)
+                {
+                    yield return m;
+                }
+            }
+        }
+
+        public static bool Prefix(Pawn_CarryTracker __instance, ref Thing resultingThing, ref bool __result, ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+            if (__instance == null || __instance.CarriedThing == null || __instance.innerContainer == null || !__instance.innerContainer.Contains(__instance.CarriedThing))
+            {
+                resultingThing = null;
+                __result = false;
+                return false;
+            }
+            return true;
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    public static class Patch_Pawn_InventoryTracker_Drop_Lock
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodInfo dropAndForbid = AccessTools.Method(typeof(Pawn), "DropAndForbidEverything");
+            if (dropAndForbid != null)
+            {
+                yield return dropAndForbid;
+            }
+
+            MethodInfo[] invMethods = typeof(Pawn_InventoryTracker).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < invMethods.Length; i++)
+            {
+                MethodInfo m = invMethods[i];
+                if (m != null && !m.IsAbstract && (m.Name == "DropAllNearPawn" || m.Name == "DropAllNearPawnHelper" || m.Name == "DropCount"))
+                {
+                    yield return m;
+                }
+            }
+
+            MethodInfo[] eqMethods = typeof(Pawn_EquipmentTracker).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < eqMethods.Length; i++)
+            {
+                MethodInfo m = eqMethods[i];
+                if (m != null && !m.IsAbstract && (m.Name == "DropAllEquipment" || m.Name == "TryDropEquipment"))
+                {
+                    yield return m;
+                }
+            }
+
+            MethodInfo[] appMethods = typeof(Pawn_ApparelTracker).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < appMethods.Length; i++)
+            {
+                MethodInfo m = appMethods[i];
+                if (m != null && !m.IsAbstract && (m.Name == "DropAll" || m.Name == "DropAllOrMoveAllToInventory" || m.Name == "TryDrop" || m.Name == "CanWearWithoutDroppingAnything"))
+                {
+                    yield return m;
+                }
+            }
+        }
+
+        public static void Prefix(ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    public static class Patch_ThingOwner_TryDrop_Lock
+    {
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodInfo[] methods = typeof(ThingOwner).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < methods.Length; i++)
+            {
+                MethodInfo m = methods[i];
+                if (m != null && m.Name == "TryDrop" && !m.IsAbstract && !m.IsGenericMethod)
+                {
+                    yield return m;
+                }
+            }
+        }
+
+        public static bool Prefix(ThingOwner __instance, Thing thing, ref bool __result, ref bool __state)
+        {
+            if (OmniThreadMod.EnableMultithreading && MainThreadSyncQueue.InParallelSection)
+            {
+                Monitor.Enter(ParallelTickEngine.GlobalSyncLock, ref __state);
+            }
+            if (__instance == null || thing == null || !__instance.Contains(thing))
+            {
+                __result = false;
+                return false;
+            }
+            return true;
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                Monitor.Exit(ParallelTickEngine.GlobalSyncLock);
+            }
         }
     }
 
@@ -2578,7 +2846,17 @@ namespace OmniThreadUltimate
                 tsQuestWorkDisabled = new List<QuestPart_WorkDisabled>(8);
             }
             tsQuestWorkDisabled.Clear();
+            if (p == null || Find.QuestManager == null)
+            {
+                __result = tsQuestWorkDisabled;
+                return false;
+            }
             List<Quest> activeQuests = Find.QuestManager.ActiveQuestsListForReading;
+            if (activeQuests == null)
+            {
+                __result = tsQuestWorkDisabled;
+                return false;
+            }
             for (int i = 0; i < activeQuests.Count; i++)
             {
                 Quest q = activeQuests[i];
@@ -2587,10 +2865,14 @@ namespace OmniThreadUltimate
                     continue;
                 }
                 List<QuestPart> parts = q.PartsListForReading;
+                if (parts == null)
+                {
+                    continue;
+                }
                 for (int j = 0; j < parts.Count; j++)
                 {
                     QuestPart_WorkDisabled wd = parts[j] as QuestPart_WorkDisabled;
-                    if (wd != null && wd.pawns.Contains(p))
+                    if (wd != null && wd.pawns != null && wd.pawns.Contains(p))
                     {
                         tsQuestWorkDisabled.Add(wd);
                     }
@@ -2654,17 +2936,24 @@ namespace OmniThreadUltimate
                 List<Thing> threats = RentThreatsList();
                 try
                 {
-                    List<IAttackTarget> potentialTargetsFor = pawn.Map.attackTargetsCache.GetPotentialTargetsFor(pawn);
-                    for (int i = 0; i < potentialTargetsFor.Count; i++)
+                    if (pawn.Map.attackTargetsCache != null)
                     {
-                        Thing thing = potentialTargetsFor[i].Thing;
-                        if (thing != null && FleeUtility.ShouldFleeFrom(thing, pawn, false, false))
+                        List<IAttackTarget> potentialTargetsFor = pawn.Map.attackTargetsCache.GetPotentialTargetsFor(pawn);
+                        if (potentialTargetsFor != null)
                         {
-                            threats.Add(thing);
+                            for (int i = 0; i < potentialTargetsFor.Count; i++)
+                            {
+                                IAttackTarget target = potentialTargetsFor[i];
+                                Thing thing = target != null ? target.Thing : null;
+                                if (thing != null && FleeUtility.ShouldFleeFrom(thing, pawn, false, false))
+                                {
+                                    threats.Add(thing);
+                                }
+                            }
                         }
                     }
 
-                    List<Thing> alwaysFleeList = pawn.Map.listerThings.ThingsInGroup(ThingRequestGroup.AlwaysFlee);
+                    List<Thing> alwaysFleeList = pawn.Map.listerThings != null ? pawn.Map.listerThings.ThingsInGroup(ThingRequestGroup.AlwaysFlee) : null;
                     if (alwaysFleeList != null)
                     {
                         for (int j = 0; j < alwaysFleeList.Count; j++)
@@ -2687,9 +2976,13 @@ namespace OmniThreadUltimate
                         }
                         RegionTraverser.BreadthFirstTraverse(
                             region,
-                            delegate(Region from, Region reg) { return reg.door == null || reg.door.Open; },
+                            delegate(Region from, Region reg) { return reg != null && (reg.door == null || reg.door.Open); },
                             delegate(Region reg)
                             {
+                                if (reg == null || reg.ListerThings == null)
+                                {
+                                    return false;
+                                }
                                 List<Thing> list2 = reg.ListerThings.ThingsInGroup(ThingRequestGroup.AttackTarget);
                                 if (list2 != null)
                                 {
@@ -2832,6 +3125,12 @@ namespace OmniThreadUltimate
             if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
                 return true;
+            }
+
+            if (map == null || !root.IsValid)
+            {
+                __result = null;
+                return false;
             }
 
             if (traverseParams.mode == TraverseMode.PassAllDestroyableThings ||
@@ -4219,25 +4518,42 @@ namespace OmniThreadUltimate
             }
 
             List<Thought> thoughts = tsMoodThoughts;
-            if (thoughts == null)
+            if (thoughts != null)
+            {
+                tsMoodThoughts = null;
+                thoughts.Clear();
+            }
+            else
             {
                 thoughts = new List<Thought>(32);
-                tsMoodThoughts = thoughts;
             }
-            thoughts.Clear();
 
-            lock (ParallelTickEngine.ThoughtHandlerLock)
+            try
             {
-                __instance.GetDistinctMoodThoughtGroups(thoughts);
-                float num = 0f;
-                for (int i = 0; i < thoughts.Count; i++)
+                lock (ParallelTickEngine.ThoughtHandlerLock)
                 {
-                    num += __instance.MoodOffsetOfGroup(thoughts[i]);
+                    __instance.GetDistinctMoodThoughtGroups(thoughts);
+                    float num = 0f;
+                    for (int i = 0; i < thoughts.Count; i++)
+                    {
+                        Thought group = thoughts[i];
+                        if (group != null)
+                        {
+                            num += __instance.MoodOffsetOfGroup(group);
+                        }
+                    }
+                    __result = num;
                 }
-                thoughts.Clear();
-                __result = num;
+                return false;
             }
-            return false;
+            finally
+            {
+                thoughts.Clear();
+                if (tsMoodThoughts == null)
+                {
+                    tsMoodThoughts = thoughts;
+                }
+            }
         }
     }
 
@@ -4254,37 +4570,67 @@ namespace OmniThreadUltimate
                 return true;
             }
 
+            if (group == null)
+            {
+                __result = 0f;
+                return false;
+            }
+
             List<Thought> thoughts = tsGroupThoughts;
-            if (thoughts == null)
+            if (thoughts != null)
+            {
+                tsGroupThoughts = null;
+                thoughts.Clear();
+            }
+            else
             {
                 thoughts = new List<Thought>(16);
-                tsGroupThoughts = thoughts;
             }
-            thoughts.Clear();
 
-            lock (ParallelTickEngine.ThoughtHandlerLock)
+            try
             {
-                __instance.GetMoodThoughts(group, thoughts);
-                if (thoughts.Count == 0)
+                lock (ParallelTickEngine.ThoughtHandlerLock)
                 {
-                    __result = 0f;
-                    return false;
+                    __instance.GetMoodThoughts(group, thoughts);
+                    if (thoughts.Count == 0)
+                    {
+                        __result = 0f;
+                        return false;
+                    }
+                    float num = 0f;
+                    float num2 = 1f;
+                    float num3 = 0f;
+                    int validCount = 0;
+                    for (int i = 0; i < thoughts.Count; i++)
+                    {
+                        Thought thought = thoughts[i];
+                        if (thought == null || thought.def == null)
+                        {
+                            continue;
+                        }
+                        validCount++;
+                        num += thought.MoodOffset();
+                        num3 += num2;
+                        num2 *= thought.def.stackedEffectMultiplier;
+                    }
+                    if (validCount == 0)
+                    {
+                        __result = 0f;
+                        return false;
+                    }
+                    float num4 = num / (float)validCount;
+                    __result = num4 * num3;
                 }
-                float num = 0f;
-                float num2 = 1f;
-                float num3 = 0f;
-                for (int i = 0; i < thoughts.Count; i++)
-                {
-                    Thought thought = thoughts[i];
-                    num += thought.MoodOffset();
-                    num3 += num2;
-                    num2 *= thought.def.stackedEffectMultiplier;
-                }
-                float num4 = num / (float)thoughts.Count;
-                thoughts.Clear();
-                __result = num4 * num3;
+                return false;
             }
-            return false;
+            finally
+            {
+                thoughts.Clear();
+                if (tsGroupThoughts == null)
+                {
+                    tsGroupThoughts = thoughts;
+                }
+            }
         }
     }
 
@@ -4596,7 +4942,12 @@ namespace OmniThreadUltimate
             {
                 for (int i = 0; i < regions.Count; i++)
                 {
-                    ListerThings listerThings = regions[i].ListerThings;
+                    Region reg = regions[i];
+                    if (reg == null)
+                    {
+                        continue;
+                    }
+                    ListerThings listerThings = reg.ListerThings;
                     if (listerThings != null && listerThings.Contains(thing))
                     {
                         listerThings.Remove(thing);
@@ -4636,7 +4987,12 @@ namespace OmniThreadUltimate
             {
                 for (int i = 0; i < regions.Count; i++)
                 {
-                    ListerThings listerThings = regions[i].ListerThings;
+                    Region reg = regions[i];
+                    if (reg == null)
+                    {
+                        continue;
+                    }
+                    ListerThings listerThings = reg.ListerThings;
                     if (listerThings != null && !listerThings.Contains(thing))
                     {
                         listerThings.Add(thing);
@@ -5592,9 +5948,14 @@ namespace OmniThreadUltimate
 
         public static bool Prefix(ThinkNode_SubtreesByTag __instance, Pawn pawn, JobIssueParams jobParams, ref ThinkResult __result)
         {
-            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection || __instance == null)
+            if (!OmniThreadMod.EnableMultithreading || !MainThreadSyncQueue.InParallelSection)
             {
                 return true;
+            }
+            if (__instance == null || pawn == null)
+            {
+                __result = ThinkResult.NoJob;
+                return false;
             }
 
             List<ThinkTreeDef> matchedTrees = Field_matchedTrees != null ? (List<ThinkTreeDef>)Field_matchedTrees.GetValue(__instance) : null;
@@ -5607,15 +5968,18 @@ namespace OmniThreadUltimate
                     {
                         List<ThinkTreeDef> built = new List<ThinkTreeDef>();
                         List<ThinkTreeDef> allDefs = DefDatabase<ThinkTreeDef>.AllDefsListForReading;
-                        for (int i = 0; i < allDefs.Count; i++)
+                        if (allDefs != null)
                         {
-                            ThinkTreeDef def = allDefs[i];
-                            if (def.insertTag == __instance.insertTag)
+                            for (int i = 0; i < allDefs.Count; i++)
                             {
-                                built.Add(def);
+                                ThinkTreeDef def = allDefs[i];
+                                if (def != null && def.insertTag == __instance.insertTag)
+                                {
+                                    built.Add(def);
+                                }
                             }
                         }
-                        built.SortByDescending((ThinkTreeDef tDef) => tDef.insertPriority);
+                        built.SortByDescending((ThinkTreeDef tDef) => tDef != null ? tDef.insertPriority : 0f);
                         if (Field_matchedTrees != null)
                         {
                             Field_matchedTrees.SetValue(__instance, built);
@@ -5627,7 +5991,12 @@ namespace OmniThreadUltimate
 
             for (int i = 0; i < matchedTrees.Count; i++)
             {
-                ThinkResult res = matchedTrees[i].thinkRoot.TryIssueJobPackage(pawn, jobParams);
+                ThinkTreeDef treeDef = matchedTrees[i];
+                if (treeDef == null || treeDef.thinkRoot == null)
+                {
+                    continue;
+                }
+                ThinkResult res = treeDef.thinkRoot.TryIssueJobPackage(pawn, jobParams);
                 if (res.IsValid)
                 {
                     __result = res;
