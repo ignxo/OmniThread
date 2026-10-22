@@ -37,9 +37,9 @@ namespace OmniThreadUltimate
 
             UpdateWallTpsCounter();
 
-            float panelWidth = 360f;
-            float panelHeight = 352f;
-            Rect panelRect = new Rect(180f, 14f, panelWidth, panelHeight);
+            float panelWidth = 390f;
+            float panelHeight = AutoBenchmarkRunner.IsAutoTestMode && !AutoBenchmarkRunner.CaptureComparisonMode ? 372f : 352f;
+            Rect panelRect = new Rect(170f, 140f, panelWidth, panelHeight);
 
             Widgets.DrawBoxSolid(panelRect, new Color(0.06f, 0.08f, 0.12f, 0.88f));
             GUI.color = new Color(0.2f, 0.75f, 0.95f, 0.9f);
@@ -56,7 +56,7 @@ namespace OmniThreadUltimate
 
             GUI.color = new Color(0.3f, 0.9f, 1f);
             Widgets.Label(new Rect(leftX, curY, innerWidth - 85f, 22f),
-                string.Format("OMNITHREAD ULTIMATE [Iter {0}]", OmniThreadMod.IterationLevel));
+                OmniThreadMod.EnableMultithreading ? "OMNITHREAD ULTIMATE [12T ON]" : "OMNITHREAD ULTIMATE [1T OFF]");
             GUI.color = Color.white;
 
             Rect toggleHudBtn = new Rect(panelRect.xMax - 82f, curY, 74f, 20f);
@@ -70,7 +70,7 @@ namespace OmniThreadUltimate
             float computeTps = avgMs > 0.001f ? (1000f / avgMs) : 0f;
             int pawnCount = Find.CurrentMap != null ? Find.CurrentMap.mapPawns.AllPawnsSpawnedCount : 0;
 
-            GUI.color = computeTps >= 240f ? new Color(0.35f, 1f, 0.45f) : (computeTps >= 60f ? Color.yellow : new Color(1f, 0.4f, 0.4f));
+            GUI.color = computeTps >= 200f ? new Color(0.35f, 1f, 0.45f) : (computeTps >= 60f ? Color.yellow : new Color(1f, 0.4f, 0.4f));
             Widgets.Label(new Rect(leftX, curY, innerWidth, 22f),
                 string.Format(CultureInfo.InvariantCulture, "Compute TPS: {0:F1}  |  Wall TPS: {1:F1}", computeTps, RealWallTps));
             GUI.color = Color.white;
@@ -82,7 +82,7 @@ namespace OmniThreadUltimate
 
             Widgets.Label(new Rect(leftX, curY, innerWidth, 22f),
                 string.Format("Active Threads: {0}/{1}  |  Map Pawns: {2}",
-                    ParallelTickEngine.ActiveWorkerThreadsLastTick,
+                    OmniThreadMod.EnableMultithreading ? ParallelTickEngine.ActiveWorkerThreadsLastTick : 1,
                     Environment.ProcessorCount,
                     pawnCount));
             curY += 20f;
@@ -101,7 +101,35 @@ namespace OmniThreadUltimate
                     MainThreadSyncQueue.CaughtConcurrencyExceptions));
             curY += 22f;
 
-            if (AutoBenchmarkRunner.IsAutoTestMode)
+            Rect modeBtnRect = new Rect(leftX, curY, innerWidth, 20f);
+            string btnLabel = OmniThreadMod.EnableMultithreading ? "Mode: MULTI-THREADED (Click to toggle)" : "Mode: VANILLA SINGLE-THREAD (Click to toggle)";
+            if (Widgets.ButtonText(modeBtnRect, btnLabel))
+            {
+                OmniThreadMod.EnableMultithreading = !OmniThreadMod.EnableMultithreading;
+                ParallelTickEngine.ResetThreadWorkCounts();
+                ResetWallTpsCounter();
+                if (OmniThreadModController.Settings != null)
+                {
+                    OmniThreadModController.Settings.EnableMultithreading = OmniThreadMod.EnableMultithreading;
+                    OmniThreadModController.Settings.Write();
+                }
+            }
+            curY += 22f;
+
+            Rect speedCapBtnRect = new Rect(leftX, curY, innerWidth, 20f);
+            string speedCapLabel = OmniThreadMod.UncapMaxTimeSpeed ? "Max Speed (>>>): UNCAPPED (Click to cap 360)" : "Max Speed (>>>): 360 TPS CAP (Click to uncap)";
+            if (Widgets.ButtonText(speedCapBtnRect, speedCapLabel))
+            {
+                OmniThreadMod.UncapMaxTimeSpeed = !OmniThreadMod.UncapMaxTimeSpeed;
+                if (OmniThreadModController.Settings != null)
+                {
+                    OmniThreadModController.Settings.UncapMaxTimeSpeed = OmniThreadMod.UncapMaxTimeSpeed;
+                    OmniThreadModController.Settings.Write();
+                }
+            }
+            curY += 22f;
+
+            if (AutoBenchmarkRunner.IsAutoTestMode && !AutoBenchmarkRunner.CaptureComparisonMode)
             {
                 float progress = Mathf.Clamp01((float)AutoBenchmarkRunner.RecordedTicks / (float)AutoBenchmarkRunner.TargetBenchmarkTicks);
                 Rect barRect = new Rect(leftX, curY, innerWidth, 16f);
@@ -110,34 +138,6 @@ namespace OmniThreadUltimate
                 Widgets.Label(barRect, string.Format("AUTOTEST: {0} / {1} Ticks", AutoBenchmarkRunner.RecordedTicks, AutoBenchmarkRunner.TargetBenchmarkTicks));
                 Text.Anchor = TextAnchor.UpperLeft;
                 curY += 20f;
-            }
-            else
-            {
-                Rect modeBtnRect = new Rect(leftX, curY, innerWidth, 20f);
-                string btnLabel = OmniThreadMod.EnableMultithreading ? "Mode: MULTI-THREADED (Click to toggle)" : "Mode: VANILLA SINGLE-THREAD (Click to toggle)";
-                if (Widgets.ButtonText(modeBtnRect, btnLabel))
-                {
-                    OmniThreadMod.EnableMultithreading = !OmniThreadMod.EnableMultithreading;
-                    if (OmniThreadModController.Settings != null)
-                    {
-                        OmniThreadModController.Settings.EnableMultithreading = OmniThreadMod.EnableMultithreading;
-                        OmniThreadModController.Settings.Write();
-                    }
-                }
-                curY += 22f;
-
-                Rect speedCapBtnRect = new Rect(leftX, curY, innerWidth, 20f);
-                string speedCapLabel = OmniThreadMod.UncapMaxTimeSpeed ? "Max Speed (>>>): UNCAPPED (Click to cap 360)" : "Max Speed (>>>): 360 TPS CAP (Click to uncap)";
-                if (Widgets.ButtonText(speedCapBtnRect, speedCapLabel))
-                {
-                    OmniThreadMod.UncapMaxTimeSpeed = !OmniThreadMod.UncapMaxTimeSpeed;
-                    if (OmniThreadModController.Settings != null)
-                    {
-                        OmniThreadModController.Settings.UncapMaxTimeSpeed = OmniThreadMod.UncapMaxTimeSpeed;
-                        OmniThreadModController.Settings.Write();
-                    }
-                }
-                curY += 22f;
             }
 
             Text.Font = GameFont.Tiny;
@@ -182,6 +182,13 @@ namespace OmniThreadUltimate
             Text.Font = prevFont;
             Text.Anchor = prevAnchor;
             GUI.color = Color.white;
+        }
+
+        public static void ResetWallTpsCounter()
+        {
+            lastFrameTicksGame = -1;
+            lastTpsSampleTime = 0f;
+            RealWallTps = 0f;
         }
 
         private static void UpdateWallTpsCounter()

@@ -50,6 +50,13 @@ Captured on **AMD Ryzen 5 5600 (6 Cores / 12 Threads)** inside live `RimWorldWin
 
 - **Stability Stress Test:** **`0` errors** across **30,000 continuous ticks** (`363 pawns`, `57 active mods`, `19.69M` parallel `DoTick()` calls & `1.54M` synced operations).
 
+### In-Game `F10` HUD Comparison (Same 57-Mod / 279-Pawn Colony)
+
+| Vanilla Single-Thread (`1T OFF`) | OmniThread Multi-Threaded (`12T ON`) |
+| :---: | :---: |
+| [![Single-Thread F10 HUD](About/Screenshot_SingleThread.png)](About/Screenshot_SingleThread.png) | [![Multi-Thread F10 HUD](About/Screenshot_MultiThread.png)](About/Screenshot_MultiThread.png) |
+| **`177.7 Compute TPS`** · `Tick: 5.63 ms` (`TickList: 4.34 ms`) · `1/12 Threads` | **`255.7 Compute TPS`** · `Tick: 3.91 ms` (`TickList: 1.57 ms` — **2.76x faster**) · `12/12 Threads` |
+
 <details>
 <summary><b>Raw 30,000-Tick Telemetry (<code>benchmark_iter_5.json</code>)</b></summary>
 <br>

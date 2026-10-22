@@ -20,6 +20,11 @@ namespace OmniThreadUltimate
         public const int WarmupTicksAfterMapLoad = 120;
 
         public static bool IsAutoTestMode = false;
+        public static bool CaptureComparisonMode = false;
+        private static int ComparisonStage = 0;
+        private static int ComparisonStageFrame = 0;
+        private static int ComparisonSwitchTick = 0;
+        private static bool ComparisonMetricsResetDone = false;
         public static string AutoTestSaveName = null;
         public static string AutoTestOutputDir = null;
         public static bool MapLaunchTriggered = false;
@@ -86,6 +91,16 @@ namespace OmniThreadUltimate
             if (GenCommandLine.TryGetCommandLineArg("autotest-out", out outDirVal) && !string.IsNullOrEmpty(outDirVal))
             {
                 AutoTestOutputDir = outDirVal.Trim();
+            }
+
+            if (GenCommandLine.CommandLineArgPassed("capture-comparison"))
+            {
+                CaptureComparisonMode = true;
+                IsAutoTestMode = true;
+                SimulatePlayerMode = false;
+                TargetBenchmarkTicks = 6000;
+                OmniThreadMod.IterationLevel = 0;
+                OmniThreadMod.EnableMultithreading = false;
             }
 
             if (IsAutoTestMode)
@@ -234,6 +249,10 @@ namespace OmniThreadUltimate
                         {
                             Current.Game.Info.permadeathMode = false;
                         }
+                        if (CaptureComparisonMode)
+                        {
+                            PrepareComparisonScene(Find.CurrentMap);
+                        }
                         Log.Message(string.Format("[OmniThread Ultimate] AutoTest Save '{0}' active! Existing spawned pawns on map = {1}. Starting {2}-tick benchmark at TimeSpeed.Ultrafast...",
                             AutoTestSaveName, Find.CurrentMap.mapPawns.AllPawnsSpawnedCount, TargetBenchmarkTicks));
                     }
@@ -244,6 +263,7 @@ namespace OmniThreadUltimate
                     TickListDurationsMs.Clear();
                     TickActiveThreadCounts.Clear();
                     ParallelTickEngine.ResetThreadWorkCounts();
+                    OmniThreadGUI.ResetWallTpsCounter();
                     ParallelTickEngine.TotalParallelThingTicks = 0;
                     ParallelTickEngine.TotalNeedsParallelTicks = 0;
                     ParallelTickEngine.TotalTargetsParallelScans = 0;
@@ -259,6 +279,160 @@ namespace OmniThreadUltimate
                         Log.Message("[OmniThread Ultimate] AutoTest: 250 Pawns spawned! Starting 3000-tick benchmark at TimeSpeed.Ultrafast...");
                     }
                 }
+            }
+            else if (CaptureComparisonMode && IsMeasuring)
+            {
+                UpdateCaptureComparison(Find.CurrentMap);
+            }
+        }
+
+        private static void PrepareComparisonScene(Map map)
+        {
+            try
+            {
+                Prefs.AdaptiveTrainingEnabled = false;
+                Prefs.DevMode = false;
+                if (Find.MainTabsRoot != null)
+                {
+                    Find.MainTabsRoot.EscapeCurrentTab(false);
+                }
+                if (Find.Selector != null)
+                {
+                    Find.Selector.ClearSelection();
+                }
+                Messages.Clear();
+
+                List<Pawn> colonists = map.mapPawns.FreeColonistsSpawned;
+                if (colonists != null)
+                {
+                    for (int i = 0; i < colonists.Count; i++)
+                    {
+                        Pawn col = colonists[i];
+                        if (col != null && col.Spawned && !col.Dead && !col.Downed)
+                        {
+                            if (col.timetable != null)
+                            {
+                                for (int h = 0; h < 24; h++)
+                                {
+                                    col.timetable.SetAssignment(h, TimeAssignmentDefOf.Work);
+                                }
+                            }
+                            if (col.needs != null && col.needs.rest != null)
+                            {
+                                col.needs.rest.CurLevel = 1f;
+                            }
+                            if (col.jobs != null && col.CurJobDef == JobDefOf.LayDown)
+                            {
+                                col.jobs.EndCurrentJob(JobCondition.InterruptForced, true, true);
+                            }
+                        }
+                    }
+                }
+                Messages.Clear();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("[OmniThread Comparison] PrepareComparisonScene warning: " + ex.Message);
+            }
+        }
+
+        private static void UpdateCaptureComparison(Map map)
+        {
+            try
+            {
+                Messages.Clear();
+                if (Find.WindowStack != null && Find.WindowStack.Windows != null)
+                {
+                    for (int i = Find.WindowStack.Windows.Count - 1; i >= 0; i--)
+                    {
+                        Window w = Find.WindowStack.Windows[i];
+                        if (w != null && w.forcePause)
+                        {
+                            w.Close(false);
+                        }
+                    }
+                }
+
+                if (ComparisonStage == 0)
+                {
+                    if (!ComparisonMetricsResetDone && RecordedTicks >= 150)
+                    {
+                        ComparisonMetricsResetDone = true;
+                        ParallelTickEngine.ResetThreadWorkCounts();
+                        OmniThreadGUI.ResetWallTpsCounter();
+                    }
+                    if (RecordedTicks >= 700)
+                    {
+                        string outDir = ResolveOutputDir();
+                        string path1 = Path.Combine(outDir, "Screenshot_SingleThread.png");
+                        ScreenCapture.CaptureScreenshot(path1);
+                        Log.Message(string.Format(CultureInfo.InvariantCulture,
+                            "[OmniThread Comparison] Captured 1T OFF screenshot to {0} at tick {1} (AvgMs={2:F2}, ComputeTPS={3:F1}, WallTPS={4:F1})",
+                            path1, RecordedTicks, ParallelTickEngine.RollingAvgTickMs,
+                            ParallelTickEngine.RollingAvgTickMs > 0.001f ? (1000f / ParallelTickEngine.RollingAvgTickMs) : 0f,
+                            OmniThreadGUI.RealWallTps));
+                        ComparisonStage = 1;
+                        ComparisonStageFrame = Time.frameCount;
+                    }
+                }
+                else if (ComparisonStage == 1)
+                {
+                    if (Time.frameCount >= ComparisonStageFrame + 15)
+                    {
+                        OmniThreadMod.IterationLevel = 5;
+                        OmniThreadMod.EnableMultithreading = true;
+                        ParallelTickEngine.ResetThreadWorkCounts();
+                        OmniThreadGUI.ResetWallTpsCounter();
+                        MainThreadSyncQueue.TotalEnqueuedActions = 0;
+                        MainThreadSyncQueue.TotalFlushedActions = 0;
+                        MainThreadSyncQueue.PreventedThreadHazards = 0;
+                        MainThreadSyncQueue.CaughtConcurrencyExceptions = 0;
+                        ModCompatibilityManager.MainThreadRoutedModThingTicks = 0;
+                        ComparisonSwitchTick = RecordedTicks;
+                        ComparisonMetricsResetDone = false;
+                        ComparisonStage = 2;
+                        Log.Message("[OmniThread Comparison] Switched to 12T ON (IterationLevel=5) at tick " + RecordedTicks);
+                    }
+                }
+                else if (ComparisonStage == 2)
+                {
+                    if (!ComparisonMetricsResetDone && RecordedTicks >= ComparisonSwitchTick + 300)
+                    {
+                        ComparisonMetricsResetDone = true;
+                        Array.Clear(ParallelTickEngine.RecentTickMs, 0, ParallelTickEngine.RecentTickMs.Length);
+                        ParallelTickEngine.RecentTickCursor = 0;
+                        ParallelTickEngine.RollingAvgTickMs = 0f;
+                        ParallelTickEngine.RollingAvgTickListMs = 0f;
+                        OmniThreadGUI.ResetWallTpsCounter();
+                    }
+                    if (RecordedTicks >= ComparisonSwitchTick + 1200)
+                    {
+                        string outDir = ResolveOutputDir();
+                        string path12 = Path.Combine(outDir, "Screenshot_MultiThread.png");
+                        ScreenCapture.CaptureScreenshot(path12);
+                        Log.Message(string.Format(CultureInfo.InvariantCulture,
+                            "[OmniThread Comparison] Captured 12T ON screenshot to {0} at tick {1} (AvgMs={2:F2}, ComputeTPS={3:F1}, WallTPS={4:F1})",
+                            path12, RecordedTicks, ParallelTickEngine.RollingAvgTickMs,
+                            ParallelTickEngine.RollingAvgTickMs > 0.001f ? (1000f / ParallelTickEngine.RollingAvgTickMs) : 0f,
+                            OmniThreadGUI.RealWallTps));
+                        ComparisonStage = 3;
+                        ComparisonStageFrame = Time.frameCount;
+                    }
+                }
+                else if (ComparisonStage == 3)
+                {
+                    if (Time.frameCount >= ComparisonStageFrame + 12)
+                    {
+                        IsMeasuring = false;
+                        BenchmarkFinished = true;
+                        ShutdownRequested = true;
+                        ShutdownDelayFrames = 0;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("[OmniThread Comparison] UpdateCaptureComparison warning: " + ex.Message);
             }
         }
 

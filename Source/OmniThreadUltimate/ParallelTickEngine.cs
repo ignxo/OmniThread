@@ -131,6 +131,10 @@ namespace OmniThreadUltimate
         {
             Array.Clear(FastThreadWorkCounts, 0, FastThreadWorkCounts.Length);
             Array.Clear(FastThreadSeenStamp, 0, FastThreadSeenStamp.Length);
+            Array.Clear(RecentTickMs, 0, RecentTickMs.Length);
+            RecentTickCursor = 0;
+            RollingAvgTickMs = 0f;
+            RollingAvgTickListMs = 0f;
             ThreadWorkCounts.Clear();
             ThreadTickWorkCounts.Clear();
         }
