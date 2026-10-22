@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="About/Preview.png" alt="OmniThread Ultimate — Multi-Threading & Auto-Hz Engine for RimWorld" width="100%" />
+  <img src="About/Preview.png" alt="OmniThread — Multi-Threading & Auto-Hz Engine for RimWorld" width="100%" />
 </p>
 
-# OmniThread Ultimate
+# OmniThread
 
 **Multi-threading and Auto-Hz frame-pacing engine for RimWorld (1.3 – 1.7).**  
 Parallelizes RimWorld's core simulation across all CPU cores for up to **2x higher TPS** in large colonies and raids — with **zero race conditions**, **smooth 60–240 Hz camera pacing**, and **100% save-game compatibility**.
@@ -12,9 +12,9 @@ Parallelizes RimWorld's core simulation across all CPU cores for up to **2x high
 > [!IMPORTANT]
 > Requires **[Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)** ([GitHub](https://github.com/pardeike/HarmonyRimWorld/releases/latest)) placed at the **very top** of your mod list (above `Core`).
 
-1. **Download [OmniThreadUltimate-v1.6.0.0.zip](https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip)**.
-2. **Extract** the `OmniThreadUltimate` folder into `RimWorld/Mods/`.
-3. **Enable** **OmniThread Ultimate** at the **very bottom** of your mod list (or click **Sort** in **RimPy** / **RimSort**).
+1. **Download [OmniThread-v1.6.0.0.zip](https://github.com/ignxo/OmniThread/releases/latest/download/OmniThread-v1.6.0.0.zip)**.
+2. **Extract** the `OmniThread` folder into `RimWorld/Mods/`.
+3. **Enable** **OmniThread** at the **very bottom** of your mod list (or click **Sort** in **RimPy** / **RimSort**).
 
 <details>
 <summary><b>Command-Line Install (PowerShell / Git) & Folder Structure</b></summary>
@@ -22,15 +22,15 @@ Parallelizes RimWorld's core simulation across all CPU cores for up to **2x high
 
 - **PowerShell (run inside `RimWorld/Mods`):**
   ```powershell
-  Invoke-WebRequest -Uri "https://github.com/ignxo/OmniThread-Ultimate/releases/latest/download/OmniThreadUltimate-v1.6.0.0.zip" -OutFile "$env:TEMP\OmniThreadUltimate.zip"; Expand-Archive -Path "$env:TEMP\OmniThreadUltimate.zip" -DestinationPath "." -Force
+  Invoke-WebRequest -Uri "https://github.com/ignxo/OmniThread/releases/latest/download/OmniThread-v1.6.0.0.zip" -OutFile "$env:TEMP\OmniThread.zip"; Expand-Archive -Path "$env:TEMP\OmniThread.zip" -DestinationPath "." -Force
   ```
 - **Git (run inside `RimWorld/Mods`):**
   ```bash
-  git clone https://github.com/ignxo/OmniThread-Ultimate.git OmniThreadUltimate
+  git clone https://github.com/ignxo/OmniThread.git OmniThread
   ```
 - **Folder Structure:**
   ```text
-  RimWorld/Mods/OmniThreadUltimate/
+  RimWorld/Mods/OmniThread/
   ├── About/
   └── Assemblies/
   ```
@@ -64,7 +64,7 @@ Captured on **AMD Ryzen 5 5600 (6 Cores / 12 Threads)** inside live `RimWorldWin
 ```json
 {
   "timestamp": "2026-10-21T22:25:02.0785790+02:00",
-  "modName": "OmniThread Ultimate",
+  "modName": "OmniThread",
   "saveName": "OmniThread_TestCopy",
   "iterationLevel": 5,
   "multithreadingEnabled": true,
@@ -131,7 +131,7 @@ Captured on **AMD Ryzen 5 5600 (6 Cores / 12 Threads)** inside live `RimWorldWin
 - **Uncapped Max Speed (`>>>`) & Auto-Hz Pacer (60–240 Hz):** Removes the vanilla `360 TPS` ceiling on Ultrafast speed while dynamically pacing ticks to your monitor's refresh rate for zero camera stutter.
 - **Deterministic Thread Safety & 100% Save-Game Safe:** Isolates pathfinding/BFS, RNG seeds, and health buffers per thread, routes Unity/Map mutations through an atomic FIFO queue, and writes **zero custom data** to `.rws` save files.
 - **Interactive `F10` HUD Overlay:** Press **`F10`** in-game to view live **Compute TPS**, **Wall TPS**, **tick time (`ms`)**, and **per-thread load bars**, or click the live buttons to toggle **Multi-Threading (`ON`/`OFF`)** and **Uncapped Speed (`>>>`)** on the fly.
-- **Mod Settings Menu:** Adjust worker thread count (`1–64`), toggle multi-threading, or toggle the `F10` overlay in **Options → Mod Settings → OmniThread Ultimate**.
+- **Mod Settings Menu:** Adjust worker thread count (`1–64`), toggle multi-threading, or toggle the `F10` overlay in **Options → Mod Settings → OmniThread**.
 
 <details>
 <summary><b>Technical C# Architecture & Thread-Safety Internals</b></summary>

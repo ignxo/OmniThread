@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Manifest>
-  <identifier>OmniThreadUltimate</identifier>
+  <identifier>OmniThread</identifier>
   <version>1.6.0.0</version>
   <dependencies>
     <li>brrainz.harmony</li>
@@ -40,6 +40,6 @@
     <li>Krkr.rule56</li>
     <li>vr.missilegirl</li>
   </loadAfter>
-  <manifestUri>https://raw.githubusercontent.com/ignxo/OmniThread-Ultimate/main/About/Manifest.xml</manifestUri>
-  <downloadUri>https://github.com/ignxo/OmniThread-Ultimate/releases/latest</downloadUri>
+  <manifestUri>https://raw.githubusercontent.com/ignxo/OmniThread/main/About/Manifest.xml</manifestUri>
+  <downloadUri>https://github.com/ignxo/OmniThread/releases/latest</downloadUri>
 </Manifest>

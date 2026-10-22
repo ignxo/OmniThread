@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-  <name>OmniThread Ultimate</name>
+  <name>OmniThread</name>
   <author>ignxo</author>
   <packageId>omnithread.ultimate</packageId>
   <modVersion>1.6.0.0</modVersion>
-  <url>https://github.com/ignxo/OmniThread-Ultimate</url>
+  <url>https://github.com/ignxo/OmniThread</url>
   <supportedVersions>
     <li>1.3</li>
     <li>1.4</li>
@@ -55,7 +55,7 @@
     <li>Krkr.rule56</li>
     <li>vr.missilegirl</li>
   </loadAfter>
-  <description>OmniThread Ultimate - Lock-Free Multi-Threaded Engine and Auto-Hz Frame Pacer for RimWorld (1.3 - 1.7).
+  <description>OmniThread - Lock-Free Multi-Threaded Engine and Auto-Hz Frame Pacer for RimWorld (1.3 - 1.7).
 
 Features:
 - Dedicated All-Core Persistent Worker Pool with Atomic Work-Stealing and Pawn/Thing LPT Interleaving.

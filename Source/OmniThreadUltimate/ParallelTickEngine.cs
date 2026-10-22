@@ -881,7 +881,7 @@ namespace OmniThreadUltimate
                                 if (stuckThing != null)
                                 {
                                     ModCompatibilityManager.MarkThingFaultedForMainThread(stuckThing);
-                                    Log.Warning(string.Format("[OmniThread Ultimate] Watchdog recovered stuck worker #{0} on '{1}' (id={2}) — isolating to MainThread.",
+                                    Log.Warning(string.Format("[OmniThread] Watchdog recovered stuck worker #{0} on '{1}' (id={2}) — isolating to MainThread.",
                                         w + 1, stuckThing.ToStringSafe(), stuckThing.thingIDNumber));
                                 }
                                 try

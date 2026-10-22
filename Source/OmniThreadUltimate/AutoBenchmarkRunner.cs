@@ -107,7 +107,7 @@ namespace OmniThreadUltimate
             {
                 OmniThreadGUI.ShowOverlay = true;
                 HeartbeatStopwatch.Restart();
-                Log.Message(string.Format("[OmniThread Ultimate] -autotest detected! Save='{0}', TargetTicks={1}, IterationLevel={2}, EnableMultithreading={3}",
+                Log.Message(string.Format("[OmniThread] -autotest detected! Save='{0}', TargetTicks={1}, IterationLevel={2}, EnableMultithreading={3}",
                     AutoTestSaveName ?? "<quicktest>", TargetBenchmarkTicks, OmniThreadMod.IterationLevel, OmniThreadMod.EnableMultithreading));
                 EnsureModActiveInModsConfig();
             }
@@ -125,7 +125,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning("[OmniThread Ultimate] EnsureModActiveInModsConfig warning: " + ex.Message);
+                Log.Warning("[OmniThread] EnsureModActiveInModsConfig warning: " + ex.Message);
             }
         }
 
@@ -143,12 +143,12 @@ namespace OmniThreadUltimate
             MapLaunchTriggered = true;
             if (!string.IsNullOrEmpty(AutoTestSaveName))
             {
-                Log.Message("[OmniThread Ultimate] AutoTest: Triggering automatic load of save '" + AutoTestSaveName + "'...");
+                Log.Message("[OmniThread] AutoTest: Triggering automatic load of save '" + AutoTestSaveName + "'...");
                 GameDataSaveLoader.LoadGame(AutoTestSaveName);
                 return;
             }
 
-            Log.Message("[OmniThread Ultimate] AutoTest: Triggering automatic test map generation and load...");
+            Log.Message("[OmniThread] AutoTest: Triggering automatic test map generation and load...");
 
             LongEventHandler.QueueLongEvent(delegate
             {
@@ -179,7 +179,7 @@ namespace OmniThreadUltimate
                     {
                         Current.Game.Info.permadeathMode = false;
                     }
-                    Log.Message("[OmniThread Ultimate] AutoTest: Calling Process.GetCurrentProcess().Kill()...");
+                    Log.Message("[OmniThread] AutoTest: Calling Process.GetCurrentProcess().Kill()...");
                     try
                     {
                         Process.GetCurrentProcess().Kill();
@@ -253,7 +253,7 @@ namespace OmniThreadUltimate
                         {
                             PrepareComparisonScene(Find.CurrentMap);
                         }
-                        Log.Message(string.Format("[OmniThread Ultimate] AutoTest Save '{0}' active! Existing spawned pawns on map = {1}. Starting {2}-tick benchmark at TimeSpeed.Ultrafast...",
+                        Log.Message(string.Format("[OmniThread] AutoTest Save '{0}' active! Existing spawned pawns on map = {1}. Starting {2}-tick benchmark at TimeSpeed.Ultrafast...",
                             AutoTestSaveName, Find.CurrentMap.mapPawns.AllPawnsSpawnedCount, TargetBenchmarkTicks));
                     }
                     PawnsSpawned = true;
@@ -276,7 +276,7 @@ namespace OmniThreadUltimate
                     WallClockStopwatch.Restart();
                     if (string.IsNullOrEmpty(AutoTestSaveName))
                     {
-                        Log.Message("[OmniThread Ultimate] AutoTest: 250 Pawns spawned! Starting 3000-tick benchmark at TimeSpeed.Ultrafast...");
+                        Log.Message("[OmniThread] AutoTest: 250 Pawns spawned! Starting 3000-tick benchmark at TimeSpeed.Ultrafast...");
                     }
                 }
             }
@@ -445,7 +445,7 @@ namespace OmniThreadUltimate
 
         private static void SpawnBenchmarkPawns(Map map)
         {
-            Log.Message("[OmniThread Ultimate] AutoTest: Spawning 250 colonists and raiders across map quadrants...");
+            Log.Message("[OmniThread] AutoTest: Spawning 250 colonists and raiders across map quadrants...");
             Faction playerFaction = Faction.OfPlayer;
             Faction hostileFaction = Find.FactionManager.FirstFactionOfDef(FactionDefOf.Pirate);
             if (hostileFaction == null)
@@ -526,7 +526,7 @@ namespace OmniThreadUltimate
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning("[OmniThread Ultimate] Error spawning colonist: " + ex.Message);
+                    Log.Warning("[OmniThread] Error spawning colonist: " + ex.Message);
                 }
             }
 
@@ -567,7 +567,7 @@ namespace OmniThreadUltimate
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning("[OmniThread Ultimate] Error spawning raider: " + ex.Message);
+                    Log.Warning("[OmniThread] Error spawning raider: " + ex.Message);
                 }
             }
 
@@ -579,12 +579,12 @@ namespace OmniThreadUltimate
                 }
                 catch (Exception ex)
                 {
-                    Log.Warning("[OmniThread Ultimate] Error creating assault lord: " + ex.Message);
+                    Log.Warning("[OmniThread] Error creating assault lord: " + ex.Message);
                 }
             }
 
             Find.TickManager.CurTimeSpeed = TimeSpeed.Ultrafast;
-            Log.Message(string.Format("[OmniThread Ultimate] AutoTest: Total spawned pawns on map = {0} (Colonists spawned: {1}, Raiders spawned: {2})",
+            Log.Message(string.Format("[OmniThread] AutoTest: Total spawned pawns on map = {0} (Colonists spawned: {1}, Raiders spawned: {2})",
                 map.mapPawns.AllPawnsSpawnedCount, SpawnedColonistsCount, SpawnedRaidersCount));
         }
 
@@ -1011,7 +1011,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Error("[OmniThread Ultimate] Failed to write benchmark_results.json: " + ex);
+                Log.Error("[OmniThread] Failed to write benchmark_results.json: " + ex);
             }
 
             try
@@ -1021,11 +1021,11 @@ namespace OmniThreadUltimate
                 string iterScreenshotPath = Path.Combine(outDir, string.Format("screenshot_iter_{0}.png", OmniThreadMod.IterationLevel));
                 ScreenCapture.CaptureScreenshot(screenshotPath);
                 ScreenCapture.CaptureScreenshot(iterScreenshotPath);
-                Log.Message("[OmniThread Ultimate] Captured screenshot to " + screenshotPath);
+                Log.Message("[OmniThread] Captured screenshot to " + screenshotPath);
             }
             catch (Exception ex)
             {
-                Log.Warning("[OmniThread Ultimate] Screenshot warning: " + ex.Message);
+                Log.Warning("[OmniThread] Screenshot warning: " + ex.Message);
             }
 
             ShutdownRequested = true;
@@ -1161,7 +1161,7 @@ namespace OmniThreadUltimate
                 Log.Message("[OmniThread Diagnostic] " + recEx);
             }
 
-            Log.Message("[OmniThread Ultimate] Benchmark complete! Results written to " + mainPath + " and " + iterPath);
+            Log.Message("[OmniThread] Benchmark complete! Results written to " + mainPath + " and " + iterPath);
         }
     }
 

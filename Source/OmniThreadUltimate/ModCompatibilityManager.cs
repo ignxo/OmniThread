@@ -99,7 +99,7 @@ namespace OmniThreadUltimate
                 });
 
                 Log.Message(string.Format(
-                    "[OmniThread Ultimate] ModCompatibilityManager initialized: ActiveMods={0}, CompatPatchesApplied={1}, MainThreadBaseTypes={2} (MissileGirl={3}, CAI5000={4}, CE={5}, Vehicles={6}, Zoology={7}, VEF={8}, Prepatcher={9})",
+                    "[OmniThread] ModCompatibilityManager initialized: ActiveMods={0}, CompatPatchesApplied={1}, MainThreadBaseTypes={2} (MissileGirl={3}, CAI5000={4}, CE={5}, Vehicles={6}, Zoology={7}, VEF={8}, Prepatcher={9})",
                     DetectedActiveModsCount,
                     AppliedModCompatPatchesCount,
                     BaseMainThreadTypes.Count,
@@ -113,7 +113,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning("[OmniThread Ultimate] ModCompatibilityManager.Initialize warning: " + ex);
+                Log.Warning("[OmniThread] ModCompatibilityManager.Initialize warning: " + ex);
             }
         }
 
@@ -133,13 +133,13 @@ namespace OmniThreadUltimate
                 if (added > 0)
                 {
                     Log.Message(string.Format(
-                        "[OmniThread Ultimate] Late post-startup mod compatibility scan protected {0} additional third-party mod methods (Total={1}).",
+                        "[OmniThread] Late post-startup mod compatibility scan protected {0} additional third-party mod methods (Total={1}).",
                         added, AppliedModCompatPatchesCount));
                 }
             }
             catch (Exception ex)
             {
-                Log.Warning("[OmniThread Ultimate] EnsureLateCompatibilityPatchesApplied warning: " + ex.Message);
+                Log.Warning("[OmniThread] EnsureLateCompatibilityPatchesApplied warning: " + ex.Message);
             }
         }
 
@@ -486,7 +486,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning("[OmniThread Ultimate] InitializeCombatAICompCacheReflection warning: " + ex.Message);
+                Log.Warning("[OmniThread] InitializeCombatAICompCacheReflection warning: " + ex.Message);
             }
         }
 
@@ -1260,7 +1260,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning("[OmniThread Ultimate] ProtectZoologyModAssembly warning: " + ex.Message);
+                Log.Warning("[OmniThread] ProtectZoologyModAssembly warning: " + ex.Message);
             }
         }
 
@@ -1318,7 +1318,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning("[OmniThread Ultimate] ScanAndProtectThirdPartyModHooks warning: " + ex.Message);
+                Log.Warning("[OmniThread] ScanAndProtectThirdPartyModHooks warning: " + ex.Message);
             }
         }
 
@@ -1534,7 +1534,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning(string.Format("[OmniThread Ultimate] Could not patch leaf lock {0}.{1}: {2}",
+                Log.Warning(string.Format("[OmniThread] Could not patch leaf lock {0}.{1}: {2}",
                     targetType.FullName, methodName, ex.Message));
             }
         }
@@ -1608,7 +1608,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning(string.Format("[OmniThread Ultimate] Could not patch {0}.{1}: {2}",
+                Log.Warning(string.Format("[OmniThread] Could not patch {0}.{1}: {2}",
                     targetType.FullName, methodName, ex.Message));
             }
         }
@@ -1652,7 +1652,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning(string.Format("[OmniThread Ultimate] Could not patch custom prefix {0}.{1}: {2}",
+                Log.Warning(string.Format("[OmniThread] Could not patch custom prefix {0}.{1}: {2}",
                     targetType.FullName, methodName, ex.Message));
             }
         }
@@ -1697,7 +1697,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Warning(string.Format("[OmniThread Ultimate] Could not patch skip prefix {0}.{1}: {2}",
+                Log.Warning(string.Format("[OmniThread] Could not patch skip prefix {0}.{1}: {2}",
                     targetType.FullName, methodName, ex.Message));
             }
         }

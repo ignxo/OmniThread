@@ -56,7 +56,7 @@ namespace OmniThreadUltimate
 
             GUI.color = new Color(0.3f, 0.9f, 1f);
             Widgets.Label(new Rect(leftX, curY, innerWidth - 85f, 22f),
-                OmniThreadMod.EnableMultithreading ? "OMNITHREAD ULTIMATE [12T ON]" : "OMNITHREAD ULTIMATE [1T OFF]");
+                OmniThreadMod.EnableMultithreading ? "OMNITHREAD [12T ON]" : "OMNITHREAD [1T OFF]");
             GUI.color = Color.white;
 
             Rect toggleHudBtn = new Rect(panelRect.xMax - 82f, curY, 74f, 20f);

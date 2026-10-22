@@ -66,7 +66,7 @@ namespace OmniThreadUltimate
 
         public override string SettingsCategory()
         {
-            return "OmniThread Ultimate";
+            return "OmniThread";
         }
 
         public override void DoSettingsWindowContents(Rect inRect)
@@ -151,7 +151,7 @@ namespace OmniThreadUltimate
                 ApplyCrossVersionFallbacks(harmony);
                 ModCompatibilityManager.Initialize(harmony);
 
-                Log.Message(string.Format("[OmniThread Ultimate] Initialized successfully! MainThreadId={0}, LogicalCores={1}, IterationLevel={2}, Multithreading={3}, UncapMaxSpeed={4}, PatchedClasses={5}, AutoTest={6}",
+                Log.Message(string.Format("[OmniThread] Initialized successfully! MainThreadId={0}, LogicalCores={1}, IterationLevel={2}, Multithreading={3}, UncapMaxSpeed={4}, PatchedClasses={5}, AutoTest={6}",
                     MainThreadSyncQueue.MainThreadId,
                     Environment.ProcessorCount,
                     IterationLevel,
@@ -162,7 +162,7 @@ namespace OmniThreadUltimate
             }
             catch (Exception ex)
             {
-                Log.Error("[OmniThread Ultimate] Fatal initialization error: " + ex);
+                Log.Error("[OmniThread] Fatal initialization error: " + ex);
             }
         }
 
