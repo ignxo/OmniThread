@@ -58,6 +58,7 @@ namespace OmniThreadUltimate
         private static int ActiveWorkersThisTick = 0;
 
         public static readonly float[] RecentTickMs = new float[120];
+        public static readonly float[] RecentTickListMs = new float[120];
         public static int RecentTickCursor = 0;
         public static float LastTickMs = 0f;
         public static float RollingAvgTickMs = 0f;
@@ -127,11 +128,58 @@ namespace OmniThreadUltimate
             }
         }
 
+        public static void RecordThreadWorkBatch(int workUnits)
+        {
+            if (workUnits <= 0)
+            {
+                workUnits = 1;
+            }
+            int tid = Thread.CurrentThread.ManagedThreadId;
+            if ((uint)tid < (uint)MaxTrackedThreadId)
+            {
+                FastThreadWorkCounts[tid << 3] += workUnits;
+                int stamp = CurrentTickStamp;
+                int stampIdx = tid << 4;
+                if (FastThreadSeenStamp[stampIdx] != stamp)
+                {
+                    FastThreadSeenStamp[stampIdx] = stamp;
+                    Interlocked.Increment(ref ActiveWorkersThisTick);
+                }
+            }
+        }
+
+        public static void RecordSingleThreadTickListWork(TickList instance)
+        {
+            try
+            {
+                if (instance != null && Find.TickManager != null)
+                {
+                    List<List<Thing>> thingLists = (List<List<Thing>>)Field_TickList_thingLists.GetValue(instance);
+                    TickerType tickType = (TickerType)Field_TickList_tickType.GetValue(instance);
+                    int interval = GetTickIntervalFor(tickType);
+                    if (thingLists != null && thingLists.Count > 0)
+                    {
+                        List<Thing> currentBucket = thingLists[Find.TickManager.TicksGame % interval];
+                        if (currentBucket != null && currentBucket.Count > 0)
+                        {
+                            RecordThreadWorkBatch(currentBucket.Count);
+                            return;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+            RecordThreadWork();
+        }
+
         public static void ResetThreadWorkCounts()
         {
             Array.Clear(FastThreadWorkCounts, 0, FastThreadWorkCounts.Length);
             Array.Clear(FastThreadSeenStamp, 0, FastThreadSeenStamp.Length);
             Array.Clear(RecentTickMs, 0, RecentTickMs.Length);
+            Array.Clear(RecentTickListMs, 0, RecentTickListMs.Length);
             RecentTickCursor = 0;
             RollingAvgTickMs = 0f;
             RollingAvgTickListMs = 0f;
@@ -168,23 +216,23 @@ namespace OmniThreadUltimate
             float ms = (float)TickStopwatch.Elapsed.TotalMilliseconds;
             LastTickMs = ms;
             RecentTickMs[RecentTickCursor] = ms;
+            RecentTickListMs[RecentTickCursor] = LastTickListMs;
             RecentTickCursor = (RecentTickCursor + 1) % RecentTickMs.Length;
 
             float sum = 0f;
+            float sumList = 0f;
             int valid = 0;
             for (int i = 0; i < RecentTickMs.Length; i++)
             {
                 if (RecentTickMs[i] > 0f)
                 {
                     sum += RecentTickMs[i];
+                    sumList += RecentTickListMs[i];
                     valid++;
                 }
             }
             RollingAvgTickMs = valid > 0 ? (sum / valid) : ms;
-            if (LastTickListMs > 0f)
-            {
-                RollingAvgTickListMs = RollingAvgTickListMs > 0f ? (RollingAvgTickListMs * 0.95f + LastTickListMs * 0.05f) : LastTickListMs;
-            }
+            RollingAvgTickListMs = valid > 0 ? (sumList / valid) : LastTickListMs;
             int activeWorkers = ActiveWorkersThisTick;
             ActiveWorkerThreadsLastTick = activeWorkers > 0 ? activeWorkers : 1;
             AutoBenchmarkRunner.NotifySingleTickCompleted(ms, ActiveWorkerThreadsLastTick);
@@ -1167,13 +1215,14 @@ namespace OmniThreadUltimate
         [HarmonyPriority(Priority.Last)]
         public static bool Prefix(TickList __instance)
         {
-            ParallelTickEngine.BeginTickListStopwatch();
             if (!OmniThreadMod.EnableMultithreading || OmniThreadMod.IterationLevel <= 0)
             {
-                ParallelTickEngine.RecordThreadWork();
+                ParallelTickEngine.RecordSingleThreadTickListWork(__instance);
+                ParallelTickEngine.BeginTickListStopwatch();
                 return true;
             }
 
+            ParallelTickEngine.BeginTickListStopwatch();
             ParallelTickEngine.ExecuteTickList(__instance);
             return false;
         }

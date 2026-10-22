@@ -192,7 +192,7 @@ namespace OmniThreadUltimate
                 return;
             }
 
-            if (Current.ProgramState != ProgramState.Playing || Find.CurrentMap == null || Find.TickManager == null)
+            if (Current.ProgramState != ProgramState.Playing || Find.CurrentMap == null || Find.TickManager == null || LongEventHandler.AnyEventNowOrWaiting)
             {
                 return;
             }
@@ -355,20 +355,25 @@ namespace OmniThreadUltimate
 
                 if (ComparisonStage == 0)
                 {
-                    if (!ComparisonMetricsResetDone && RecordedTicks >= 150)
+                    if (!ComparisonMetricsResetDone && RecordedTicks >= 320)
                     {
                         ComparisonMetricsResetDone = true;
                         ParallelTickEngine.ResetThreadWorkCounts();
                         OmniThreadGUI.ResetWallTpsCounter();
+                        MainThreadSyncQueue.TotalEnqueuedActions = 0;
+                        MainThreadSyncQueue.TotalFlushedActions = 0;
+                        MainThreadSyncQueue.PreventedThreadHazards = 0;
+                        MainThreadSyncQueue.CaughtConcurrencyExceptions = 0;
+                        ModCompatibilityManager.MainThreadRoutedModThingTicks = 0;
                     }
-                    if (RecordedTicks >= 700)
+                    if (RecordedTicks >= 920 && (ParallelTickEngine.LastTickMs <= ParallelTickEngine.RollingAvgTickMs * 1.25f || RecordedTicks >= 935))
                     {
                         string outDir = ResolveOutputDir();
                         string path1 = Path.Combine(outDir, "Screenshot_SingleThread.png");
                         ScreenCapture.CaptureScreenshot(path1);
                         Log.Message(string.Format(CultureInfo.InvariantCulture,
-                            "[OmniThread Comparison] Captured 1T OFF screenshot to {0} at tick {1} (AvgMs={2:F2}, ComputeTPS={3:F1}, WallTPS={4:F1})",
-                            path1, RecordedTicks, ParallelTickEngine.RollingAvgTickMs,
+                            "[OmniThread Comparison] Captured 1T OFF screenshot to {0} at tick {1} (AvgMs={2:F2}, TickListMs={3:F2}, ComputeTPS={4:F1}, WallTPS={5:F1})",
+                            path1, RecordedTicks, ParallelTickEngine.RollingAvgTickMs, ParallelTickEngine.RollingAvgTickListMs,
                             ParallelTickEngine.RollingAvgTickMs > 0.001f ? (1000f / ParallelTickEngine.RollingAvgTickMs) : 0f,
                             OmniThreadGUI.RealWallTps));
                         ComparisonStage = 1;
@@ -396,23 +401,25 @@ namespace OmniThreadUltimate
                 }
                 else if (ComparisonStage == 2)
                 {
-                    if (!ComparisonMetricsResetDone && RecordedTicks >= ComparisonSwitchTick + 300)
+                    if (!ComparisonMetricsResetDone && RecordedTicks >= 1522)
                     {
                         ComparisonMetricsResetDone = true;
-                        Array.Clear(ParallelTickEngine.RecentTickMs, 0, ParallelTickEngine.RecentTickMs.Length);
-                        ParallelTickEngine.RecentTickCursor = 0;
-                        ParallelTickEngine.RollingAvgTickMs = 0f;
-                        ParallelTickEngine.RollingAvgTickListMs = 0f;
+                        ParallelTickEngine.ResetThreadWorkCounts();
                         OmniThreadGUI.ResetWallTpsCounter();
+                        MainThreadSyncQueue.TotalEnqueuedActions = 0;
+                        MainThreadSyncQueue.TotalFlushedActions = 0;
+                        MainThreadSyncQueue.PreventedThreadHazards = 0;
+                        MainThreadSyncQueue.CaughtConcurrencyExceptions = 0;
+                        ModCompatibilityManager.MainThreadRoutedModThingTicks = 0;
                     }
-                    if (RecordedTicks >= ComparisonSwitchTick + 1200)
+                    if (RecordedTicks >= 2122 && (ParallelTickEngine.LastTickMs <= ParallelTickEngine.RollingAvgTickMs * 1.25f || RecordedTicks >= 2135))
                     {
                         string outDir = ResolveOutputDir();
                         string path12 = Path.Combine(outDir, "Screenshot_MultiThread.png");
                         ScreenCapture.CaptureScreenshot(path12);
                         Log.Message(string.Format(CultureInfo.InvariantCulture,
-                            "[OmniThread Comparison] Captured 12T ON screenshot to {0} at tick {1} (AvgMs={2:F2}, ComputeTPS={3:F1}, WallTPS={4:F1})",
-                            path12, RecordedTicks, ParallelTickEngine.RollingAvgTickMs,
+                            "[OmniThread Comparison] Captured 12T ON screenshot to {0} at tick {1} (AvgMs={2:F2}, TickListMs={3:F2}, ComputeTPS={4:F1}, WallTPS={5:F1})",
+                            path12, RecordedTicks, ParallelTickEngine.RollingAvgTickMs, ParallelTickEngine.RollingAvgTickListMs,
                             ParallelTickEngine.RollingAvgTickMs > 0.001f ? (1000f / ParallelTickEngine.RollingAvgTickMs) : 0f,
                             OmniThreadGUI.RealWallTps));
                         ComparisonStage = 3;

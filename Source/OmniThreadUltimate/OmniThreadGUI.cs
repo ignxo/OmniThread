@@ -37,8 +37,8 @@ namespace OmniThreadUltimate
 
             UpdateWallTpsCounter();
 
-            float panelWidth = 390f;
-            float panelHeight = AutoBenchmarkRunner.IsAutoTestMode && !AutoBenchmarkRunner.CaptureComparisonMode ? 372f : 352f;
+            float panelWidth = 446f;
+            float panelHeight = AutoBenchmarkRunner.IsAutoTestMode && !AutoBenchmarkRunner.CaptureComparisonMode ? 392f : 372f;
             Rect panelRect = new Rect(170f, 140f, panelWidth, panelHeight);
 
             Widgets.DrawBoxSolid(panelRect, new Color(0.06f, 0.08f, 0.12f, 0.88f));
@@ -141,7 +141,7 @@ namespace OmniThreadUltimate
             }
 
             Text.Font = GameFont.Tiny;
-            Widgets.Label(new Rect(leftX, curY, innerWidth, 16f), "Per-Thread Work Distribution (Top 8 Worker Threads):");
+            Widgets.Label(new Rect(leftX, curY, innerWidth, 16f), "Per-Thread Work Distribution (Top 8 Threads):");
             curY += 16f;
 
             ParallelTickEngine.SyncThreadWorkDictionary();
@@ -160,21 +160,21 @@ namespace OmniThreadUltimate
                 return b.Value.CompareTo(a.Value);
             });
 
-            int barsToShow = Math.Min(7, SortedThreads.Count);
+            int barsToShow = Math.Min(8, SortedThreads.Count);
             for (int i = 0; i < barsToShow; i++)
             {
                 KeyValuePair<int, long> item = SortedThreads[i];
                 float ratio = Mathf.Clamp01((float)item.Value / (float)maxWork);
-                Rect labelRect = new Rect(leftX, curY, 90f, 14f);
+                Rect labelRect = new Rect(leftX, curY - 1f, 92f, 16f);
                 string tTag = (item.Key == MainThreadSyncQueue.MainThreadId) ? string.Format("T#{0} (Main)", item.Key) : string.Format("T#{0} (Work)", item.Key);
                 Widgets.Label(labelRect, tTag);
 
-                Rect barBg = new Rect(leftX + 92f, curY + 2f, innerWidth - 155f, 10f);
+                Rect barBg = new Rect(leftX + 94f, curY + 2f, innerWidth - 168f, 10f);
                 Widgets.DrawBoxSolid(barBg, new Color(0.18f, 0.2f, 0.25f, 0.9f));
                 Rect barFill = new Rect(barBg.x, barBg.y, barBg.width * ratio, barBg.height);
                 Widgets.DrawBoxSolid(barFill, item.Key == MainThreadSyncQueue.MainThreadId ? new Color(0.95f, 0.65f, 0.2f, 0.9f) : new Color(0.25f, 0.85f, 0.55f, 0.9f));
 
-                Rect valRect = new Rect(barBg.xMax + 4f, curY, 60f, 14f);
+                Rect valRect = new Rect(barBg.xMax + 5f, curY - 1f, 68f, 16f);
                 Widgets.Label(valRect, item.Value.ToString());
                 curY += 15f;
             }
@@ -203,10 +203,11 @@ namespace OmniThreadUltimate
             }
 
             float dt = now - lastTpsSampleTime;
-            if (dt >= 0.25f)
+            if (dt >= 0.5f)
             {
                 int deltaTicks = Math.Max(0, curTicks - lastFrameTicksGame);
-                RealWallTps = deltaTicks / dt;
+                float sampleTps = deltaTicks / dt;
+                RealWallTps = RealWallTps > 1f ? (RealWallTps * 0.5f + sampleTps * 0.5f) : sampleTps;
                 lastFrameTicksGame = curTicks;
                 lastTpsSampleTime = now;
             }
