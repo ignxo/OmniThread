@@ -4,7 +4,7 @@
 
 # OmniThread
 
-**Multi-threading and Auto-Hz frame-pacing engine for RimWorld (1.3 – 1.7).**  
+**Multi-threading and Auto-Hz frame-pacing engine for RimWorld (1.6).**  
 Parallelizes RimWorld's core simulation across all CPU cores for up to **2x higher TPS** in large colonies and raids — with **zero race conditions**, **smooth 60–240 Hz camera pacing**, and **100% save-game compatibility**.
 
 ## Download & Install
@@ -179,7 +179,7 @@ flowchart LR
 | # | Mod / Expansion Name | Package ID | Status |
 | :---: | :--- | :--- | :--- |
 | 1 | **Harmony** | `brrainz.harmony` | Required Dependency |
-| 2 | **RimWorld Core (1.3 – 1.7)** | `Ludeon.RimWorld` | Verified (30k Ticks) |
+| 2 | **RimWorld Core (1.6)** | `Ludeon.RimWorld` | Verified (30k Ticks) |
 | 3 | **RimWorld - Royalty** | `Ludeon.RimWorld.Royalty` | Verified (30k Ticks) |
 | 4 | **RimWorld - Ideology** | `Ludeon.RimWorld.Ideology` | Verified (30k Ticks) |
 | 5 | **RimWorld - Biotech** | `Ludeon.RimWorld.Biotech` | Verified (30k Ticks) |
